@@ -119,9 +119,6 @@ down-local:
 	$(STANDALONE_DIRECTORY)/docker-compose-core.yaml -f $(STANDALONE_DIRECTORY)/docker-compose-local.yaml \
 	down -v
 
-pull-signoz:
-	@docker-compose -f $(STANDALONE_DIRECTORY)/docker-compose.yaml pull
-
 run-signoz:
 	@docker-compose -f $(STANDALONE_DIRECTORY)/docker-compose.yaml up --build -d
 
