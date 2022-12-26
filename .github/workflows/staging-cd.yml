@@ -15,8 +15,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      - name: Get tags
-        run: git fetch --tags origin
+      - name: Get latest tags from SigNoz repository remote
+        run: |
+          git config --global --add safe.directory /home/ubuntu/actions-runner/_work/signoz/signoz
+          git fetch --tags origin
       - name: Build query-service image
         run: make build-ee-query-service-amd64
       - name: Build frontend image
