@@ -1,0 +1,23 @@
+name: staging-cd
+
+# Trigger deployment only on push to develop branch
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  deploy:
+    name: Deploy to EC2 on develop branch push
+    runs-on: [self-hosted, prash]
+
+    env:
+      DOCKER_TAG: develop
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Pull latest SigNoz images from compose YAML
+        run: make pull-signoz
+      - name: Deploy latest code
+        run: make run-signoz
