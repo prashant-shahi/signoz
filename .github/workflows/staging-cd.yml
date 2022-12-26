@@ -13,13 +13,17 @@ jobs:
 
     env:
       DOCKER_TAG: develop
+      DEV_BUILD: 1
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Build latest SigNoz images from develop
-        run: make build-query-service-amd64 && make build-frontend-amd64
+      - name: Build query-service image
+        run: make build-ee-query-service-amd64
+
+      - name: Build frontend image
+        run: make build-frontend-amd64
 
       - name: Deploy latest code
         run: make run-signoz
