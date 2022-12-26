@@ -12,8 +12,6 @@ jobs:
     env:
       DOCKER_TAG: develop
     steps:
-      - name: Clean the workspace
-        run: rm -rf $GITHUB_WORKSPACE/*
       - name: Checkout code
         uses: actions/checkout@v2
       - name: Pull latest SigNoz images from compose YAML
