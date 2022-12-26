@@ -5,25 +5,21 @@ on:
   push:
     branches:
       - develop
-
 jobs:
   deploy:
     name: Deploy to EC2 on develop branch push
     runs-on: [self-hosted, prash]
-
     env:
       DOCKER_TAG: develop
       DEV_BUILD: 1
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-
+      - name: Get tags
+        run: git fetch --tags origin
       - name: Build query-service image
         run: make build-ee-query-service-amd64
-
       - name: Build frontend image
         run: make build-frontend-amd64
-
       - name: Deploy latest code
         run: make run-signoz
