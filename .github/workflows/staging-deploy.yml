@@ -20,6 +20,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: DOCKER_TAG,GITHUB_SHA
+          command_timeout: 60m
           script: |
             echo "DOCKER_TAG: ${DOCKER_TAG}"
             echo "GITHUB_SHA: ${GITHUB_SHA}"
