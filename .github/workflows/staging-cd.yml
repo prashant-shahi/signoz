@@ -1,0 +1,29 @@
+name: staging-cd
+
+# Trigger deployment only on push to develop branch
+on:
+  push:
+    branches:
+      - develop
+jobs:
+  deploy:
+    name: Deploy to EC2 on develop branch push
+    runs-on: [self-hosted, prash]
+    env:
+      DOCKER_TAG: develop
+      DEV_BUILD: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Get latest tags from SigNoz repository remote
+        run: |
+          git config --global --add safe.directory /home/ubuntu/actions-runner/_work/signoz/signoz
+          git fetch --tags origin
+      - name: Clean up unused docker data
+        run: docker system prune
+      - name: Build query-service image
+        run: make build-ee-query-service-amd64
+      - name: Build frontend image
+        run: make build-frontend-amd64
+      - name: Deploy latest code
+        run: make run-signoz
