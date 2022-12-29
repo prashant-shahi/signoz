@@ -82,6 +82,7 @@ build-ee-query-service-amd64:
 	@echo "------------------"
 	@echo "--> Building query-service docker image for amd64"
 	@echo "------------------"
+	@echo "LD_FLAGS: $(LD_FLAGS)"
 	@if [ $(DEV_BUILD) != "" ]; then \
 		docker build --file $(EE_QUERY_SERVICE_DIRECTORY)/Dockerfile \
 		-t $(REPONAME)/$(QUERY_SERVICE_DOCKER_IMAGE):$(DOCKER_TAG) \
