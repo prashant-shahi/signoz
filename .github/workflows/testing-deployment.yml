@@ -7,7 +7,7 @@ jobs:
   deploy:
     name: Deploy PR branch to testing
     runs-on: ubuntu-latest
-    environment: staging
+    environment: testing
     if: ${{ github.event.label.name == 'testing-deploy' }}
     steps:
       - name: Executing remote ssh commands using ssh key
