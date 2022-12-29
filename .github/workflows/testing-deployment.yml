@@ -25,6 +25,7 @@ jobs:
           script: |
             echo "DOCKER_TAG: ${DOCKER_TAG}"
             echo "GITHUB_SHA: ${GITHUB_SHA}"
+            export DOCKER_TAG="${DOCKER_TAG}" # needed for child process to access it
             docker system prune --force
             cd ~/signoz
             git status
