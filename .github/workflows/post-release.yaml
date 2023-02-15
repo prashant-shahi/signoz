@@ -16,6 +16,7 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
+          git fetch origin main develop
           git checkout develop
           git merge main
-          git push
+          git push origin develop
