@@ -18,5 +18,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git fetch origin main develop
           git checkout develop
-          git merge main
+          git merge origin/main
           git push origin develop
