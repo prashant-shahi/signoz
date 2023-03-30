@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery"
-	sd_config "github.com/prometheus/prometheus/discovery/config"
+	sd_config "github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/promql"
 
 	"github.com/prometheus/prometheus/scrape"
@@ -41,10 +41,12 @@ import (
 
 	promModel "github.com/prometheus/common/model"
 	"go.signoz.io/signoz/pkg/query-service/app/logs"
+	"go.signoz.io/signoz/pkg/query-service/app/services"
 	"go.signoz.io/signoz/pkg/query-service/constants"
 	am "go.signoz.io/signoz/pkg/query-service/integrations/alertManager"
 	"go.signoz.io/signoz/pkg/query-service/interfaces"
 	"go.signoz.io/signoz/pkg/query-service/model"
+	v3 "go.signoz.io/signoz/pkg/query-service/model/v3"
 	"go.signoz.io/signoz/pkg/query-service/telemetry"
 	"go.signoz.io/signoz/pkg/query-service/utils"
 	"go.uber.org/zap"
@@ -157,21 +159,28 @@ func NewReader(localDB *sqlx.DB, configFile string, featureFlag interfaces.Featu
 func (r *ClickHouseReader) Start(readerReady chan bool) {
 	logLevel := promlog.AllowedLevel{}
 	logLevel.Set("debug")
-	// allowedFormat := promlog.AllowedFormat{}
-	// allowedFormat.Set("logfmt")
+	allowedFormat := promlog.AllowedFormat{}
+	allowedFormat.Set("logfmt")
 
-	// promlogConfig := promlog.Config{
-	// 	Level:  &logLevel,
-	// 	Format: &allowedFormat,
-	// }
+	promlogConfig := promlog.Config{
+		Level:  &logLevel,
+		Format: &allowedFormat,
+	}
 
-	logger := promlog.New(logLevel)
+	logger := promlog.New(&promlogConfig)
 
 	startTime := func() (int64, error) {
 		return int64(promModel.Latest), nil
 	}
 
-	remoteStorage := remote.NewStorage(log.With(logger, "component", "remote"), startTime, time.Duration(1*time.Minute))
+	remoteStorage := remote.NewStorage(
+		log.With(logger, "component", "remote"),
+		nil,
+		startTime,
+		"",
+		time.Duration(1*time.Minute),
+		nil,
+	)
 
 	cfg := struct {
 		configFile string
@@ -197,14 +206,18 @@ func (r *ClickHouseReader) Start(readerReady chan bool) {
 	ctxScrape, cancelScrape := context.WithCancel(context.Background())
 	discoveryManagerScrape := discovery.NewManager(ctxScrape, log.With(logger, "component", "discovery manager scrape"), discovery.Name("scrape"))
 
-	scrapeManager := scrape.NewManager(log.With(logger, "component", "scrape manager"), fanoutStorage)
+	scrapeManager := scrape.NewManager(nil, log.With(logger, "component", "scrape manager"), fanoutStorage)
 
 	opts := promql.EngineOpts{
-		Logger:        log.With(logger, "component", "query engine"),
-		Reg:           nil,
-		MaxConcurrent: 20,
-		MaxSamples:    50000000,
-		Timeout:       time.Duration(2 * time.Minute),
+		Logger:     log.With(logger, "component", "query engine"),
+		Reg:        nil,
+		MaxSamples: 50000000,
+		Timeout:    time.Duration(2 * time.Minute),
+		ActiveQueryTracker: promql.NewActiveQueryTracker(
+			"",
+			20,
+			log.With(logger, "component", "activeQueryTracker"),
+		),
 	}
 
 	queryEngine := promql.NewEngine(opts)
@@ -215,9 +228,9 @@ func (r *ClickHouseReader) Start(readerReady chan bool) {
 		// they need to read the most updated config when receiving the new targets list.
 		scrapeManager.ApplyConfig,
 		func(cfg *config.Config) error {
-			c := make(map[string]sd_config.ServiceDiscoveryConfig)
+			c := make(map[string]sd_config.Configs)
 			for _, v := range cfg.ScrapeConfigs {
-				c[v.JobName] = v.ServiceDiscoveryConfig
+				c[v.JobName] = v.ServiceDiscoveryConfigs
 			}
 			return discoveryManagerScrape.ApplyConfig(c)
 		},
@@ -343,7 +356,7 @@ func (r *ClickHouseReader) GetFanoutStorage() *storage.Storage {
 func reloadConfig(filename string, logger log.Logger, rls ...func(*config.Config) error) (promConfig *config.Config, err error) {
 	level.Info(logger).Log("msg", "Loading configuration file", "filename", filename)
 
-	conf, err := config.LoadFile(filename)
+	conf, err := config.LoadFile(filename, false, false, logger)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't load configuration (--config.file=%q): %v", filename, err)
 	}
@@ -634,7 +647,7 @@ func (r *ClickHouseReader) CreateChannel(receiver *am.Receiver) (*am.Receiver, *
 }
 
 func (r *ClickHouseReader) GetInstantQueryMetricsResult(ctx context.Context, queryParams *model.InstantQueryMetricsParams) (*promql.Result, *stats.QueryStats, *model.ApiError) {
-	qry, err := r.queryEngine.NewInstantQuery(r.remoteStorage, queryParams.Query, queryParams.Time)
+	qry, err := r.queryEngine.NewInstantQuery(r.remoteStorage, &promql.QueryOpts{}, queryParams.Query, queryParams.Time)
 	if err != nil {
 		return nil, nil, &model.ApiError{Typ: model.ErrorBadData, Err: err}
 	}
@@ -642,19 +655,18 @@ func (r *ClickHouseReader) GetInstantQueryMetricsResult(ctx context.Context, que
 	res := qry.Exec(ctx)
 
 	// Optional stats field in response if parameter "stats" is not empty.
-	var qs *stats.QueryStats
+	var qs stats.QueryStats
 	if queryParams.Stats != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 
 	qry.Close()
-	return res, qs, nil
+	return res, &qs, nil
 
 }
 
 func (r *ClickHouseReader) GetQueryRangeResult(ctx context.Context, query *model.QueryRangeParams) (*promql.Result, *stats.QueryStats, *model.ApiError) {
-
-	qry, err := r.queryEngine.NewRangeQuery(r.remoteStorage, query.Query, query.Start, query.End, query.Step)
+	qry, err := r.queryEngine.NewRangeQuery(r.remoteStorage, &promql.QueryOpts{}, query.Query, query.Start, query.End, query.Step)
 
 	if err != nil {
 		return nil, nil, &model.ApiError{Typ: model.ErrorBadData, Err: err}
@@ -663,13 +675,13 @@ func (r *ClickHouseReader) GetQueryRangeResult(ctx context.Context, query *model
 	res := qry.Exec(ctx)
 
 	// Optional stats field in response if parameter "stats" is not empty.
-	var qs *stats.QueryStats
+	var qs stats.QueryStats
 	if query.Stats != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
 
 	qry.Close()
-	return res, qs, nil
+	return res, &qs, nil
 }
 
 func (r *ClickHouseReader) GetServicesList(ctx context.Context) (*[]string, error) {
@@ -999,6 +1011,11 @@ func (r *ClickHouseReader) GetSpanFilters(ctx context.Context, queryParams *mode
 	if len(queryParams.MaxDuration) != 0 {
 		query = query + " AND durationNano <= @durationNanoMax"
 		args = append(args, clickhouse.Named("durationNanoMax", queryParams.MaxDuration))
+	}
+
+	if len(queryParams.SpanKind) != 0 {
+		query = query + " AND kind = @kind"
+		args = append(args, clickhouse.Named("kind", queryParams.SpanKind))
 	}
 
 	query = getStatusFilters(query, queryParams.Status, excludeMap)
@@ -1364,9 +1381,9 @@ func (r *ClickHouseReader) GetFilteredSpans(ctx context.Context, queryParams *mo
 	}
 	query = getStatusFilters(query, queryParams.Status, excludeMap)
 
-	if len(queryParams.Kind) != 0 {
+	if len(queryParams.SpanKind) != 0 {
 		query = query + " AND kind = @kind"
-		args = append(args, clickhouse.Named("kind", queryParams.Kind))
+		args = append(args, clickhouse.Named("kind", queryParams.SpanKind))
 	}
 
 	// create TagQuery from TagQueryParams
@@ -1448,13 +1465,13 @@ func createTagQueryFromTagQueryParams(queryParams []model.TagQueryParam) []model
 	tags := []model.TagQuery{}
 	for _, tag := range queryParams {
 		if len(tag.StringValues) > 0 {
-			tags = append(tags, model.NewTagQueryString(tag.Key, tag.StringValues, tag.Operator))
+			tags = append(tags, model.NewTagQueryString(tag))
 		}
 		if len(tag.NumberValues) > 0 {
-			tags = append(tags, model.NewTagQueryNumber(tag.Key, tag.NumberValues, tag.Operator))
+			tags = append(tags, model.NewTagQueryNumber(tag))
 		}
 		if len(tag.BoolValues) > 0 {
-			tags = append(tags, model.NewTagQueryBool(tag.Key, tag.BoolValues, tag.Operator))
+			tags = append(tags, model.NewTagQueryBool(tag))
 		}
 	}
 	return tags
@@ -1478,18 +1495,7 @@ func buildQueryWithTagParams(ctx context.Context, tags []model.TagQuery) (string
 	for _, item := range tags {
 		var subQuery string
 		var argsSubQuery []interface{}
-		tagMapType := ""
-		switch item.(type) {
-		case model.TagQueryString:
-			tagMapType = constants.StringTagMapCol
-		case model.TagQueryNumber:
-			tagMapType = constants.NumberTagMapCol
-		case model.TagQueryBool:
-			tagMapType = constants.BoolTagMapCol
-		default:
-			// type not supported error
-			return "", nil, &model.ApiError{Typ: model.ErrorBadData, Err: fmt.Errorf("type not supported")}
-		}
+		tagMapType := item.GetTagMapColumn()
 		switch item.GetOperator() {
 		case model.EqualOperator:
 			subQuery, argsSubQuery = addArithmeticOperator(item, tagMapType, "=")
@@ -1666,6 +1672,10 @@ func (r *ClickHouseReader) GetTagFilters(ctx context.Context, queryParams *model
 		query = query + " AND durationNano <= @durationNanoMax"
 		args = append(args, clickhouse.Named("durationNanoMax", queryParams.MaxDuration))
 	}
+	if len(queryParams.SpanKind) != 0 {
+		query = query + " AND kind = @kind"
+		args = append(args, clickhouse.Named("kind", queryParams.SpanKind))
+	}
 
 	query = getStatusFilters(query, queryParams.Status, excludeMap)
 
@@ -1780,6 +1790,10 @@ func (r *ClickHouseReader) GetTagValues(ctx context.Context, queryParams *model.
 	if len(queryParams.MaxDuration) != 0 {
 		query = query + " AND durationNano <= @durationNanoMax"
 		args = append(args, clickhouse.Named("durationNanoMax", queryParams.MaxDuration))
+	}
+	if len(queryParams.SpanKind) != 0 {
+		query = query + " AND kind = @kind"
+		args = append(args, clickhouse.Named("kind", queryParams.SpanKind))
 	}
 
 	query = getStatusFilters(query, queryParams.Status, excludeMap)
@@ -1981,14 +1995,16 @@ func (r *ClickHouseReader) GetDependencyGraph(ctx context.Context, queryParams *
 			result[5] AS p99,
 			sum(total_count) as callCount,
 			sum(total_count)/ @duration AS callRate,
-			sum(error_count)/sum(total_count) as errorRate
+			sum(error_count)/sum(total_count) * 100 as errorRate
 		FROM %s.%s
-		WHERE toUInt64(toDateTime(timestamp)) >= @start AND toUInt64(toDateTime(timestamp)) <= @end
-		GROUP BY
-			src,
-			dest`,
+		WHERE toUInt64(toDateTime(timestamp)) >= @start AND toUInt64(toDateTime(timestamp)) <= @end`,
 		r.TraceDB, r.dependencyGraphTable,
 	)
+
+	tags := createTagQueryFromTagQueryParams(queryParams.Tags)
+	filterQuery, filterArgs := services.BuildServiceMapQuery(tags)
+	query += filterQuery + " GROUP BY src, dest;"
+	args = append(args, filterArgs...)
 
 	zap.S().Debug(query, args)
 
@@ -1996,7 +2012,7 @@ func (r *ClickHouseReader) GetDependencyGraph(ctx context.Context, queryParams *
 
 	if err != nil {
 		zap.S().Error("Error in processing sql query: ", err)
-		return nil, fmt.Errorf("Error in processing sql query")
+		return nil, fmt.Errorf("error in processing sql query %w", err)
 	}
 
 	return &response, nil
@@ -2113,9 +2129,9 @@ func (r *ClickHouseReader) GetFilteredSpansAggregates(ctx context.Context, query
 	}
 	query = getStatusFilters(query, queryParams.Status, excludeMap)
 
-	if len(queryParams.Kind) != 0 {
+	if len(queryParams.SpanKind) != 0 {
 		query = query + " AND kind = @kind"
-		args = append(args, clickhouse.Named("kind", queryParams.Kind))
+		args = append(args, clickhouse.Named("kind", queryParams.SpanKind))
 	}
 	// create TagQuery from TagQueryParams
 	tags := createTagQueryFromTagQueryParams(queryParams.Tags)
@@ -2674,6 +2690,17 @@ func (r *ClickHouseReader) ListErrors(ctx context.Context, queryParams *model.Li
 		query = query + " AND exceptionType ilike @exceptionType"
 		args = append(args, clickhouse.Named("exceptionType", "%"+queryParams.ExceptionType+"%"))
 	}
+
+	// create TagQuery from TagQueryParams
+	tags := createTagQueryFromTagQueryParams(queryParams.Tags)
+	subQuery, argsSubQuery, errStatus := buildQueryWithTagParams(ctx, tags)
+	query += subQuery
+	args = append(args, argsSubQuery...)
+
+	if errStatus != nil {
+		zap.S().Error("Error in processing tags: ", errStatus)
+		return nil, errStatus
+	}
 	query = query + " GROUP BY groupID"
 	if len(queryParams.ServiceName) != 0 {
 		query = query + ", serviceName"
@@ -2723,6 +2750,18 @@ func (r *ClickHouseReader) CountErrors(ctx context.Context, queryParams *model.C
 		query = query + " AND exceptionType ilike @exceptionType"
 		args = append(args, clickhouse.Named("exceptionType", "%"+queryParams.ExceptionType+"%"))
 	}
+
+	// create TagQuery from TagQueryParams
+	tags := createTagQueryFromTagQueryParams(queryParams.Tags)
+	subQuery, argsSubQuery, errStatus := buildQueryWithTagParams(ctx, tags)
+	query += subQuery
+	args = append(args, argsSubQuery...)
+
+	if errStatus != nil {
+		zap.S().Error("Error in processing tags: ", errStatus)
+		return 0, errStatus
+	}
+
 	err := r.db.QueryRow(ctx, query, args...).Scan(&errorCount)
 	zap.S().Info(query)
 
@@ -2742,7 +2781,7 @@ func (r *ClickHouseReader) GetErrorFromErrorID(ctx context.Context, queryParams 
 	}
 	var getErrorWithSpanReponse []model.ErrorWithSpan
 
-	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE timestamp = @timestamp AND groupID = @groupID AND errorID = @errorID LIMIT 1", r.TraceDB, r.errorTable)
+	query := fmt.Sprintf("SELECT errorID, exceptionType, exceptionStacktrace, exceptionEscaped, exceptionMessage, timestamp, spanID, traceID, serviceName, groupID FROM %s.%s WHERE timestamp = @timestamp AND groupID = @groupID AND errorID = @errorID LIMIT 1", r.TraceDB, r.errorTable)
 	args := []interface{}{clickhouse.Named("errorID", queryParams.ErrorID), clickhouse.Named("groupID", queryParams.GroupID), clickhouse.Named("timestamp", strconv.FormatInt(queryParams.Timestamp.UnixNano(), 10))}
 
 	err := r.db.Select(ctx, &getErrorWithSpanReponse, query, args...)
@@ -2765,7 +2804,7 @@ func (r *ClickHouseReader) GetErrorFromGroupID(ctx context.Context, queryParams 
 
 	var getErrorWithSpanReponse []model.ErrorWithSpan
 
-	query := fmt.Sprintf("SELECT * FROM %s.%s WHERE timestamp = @timestamp AND groupID = @groupID LIMIT 1", r.TraceDB, r.errorTable)
+	query := fmt.Sprintf("SELECT errorID, exceptionType, exceptionStacktrace, exceptionEscaped, exceptionMessage, timestamp, spanID, traceID, serviceName, groupID FROM %s.%s WHERE timestamp = @timestamp AND groupID = @groupID LIMIT 1", r.TraceDB, r.errorTable)
 	args := []interface{}{clickhouse.Named("groupID", queryParams.GroupID), clickhouse.Named("timestamp", strconv.FormatInt(queryParams.Timestamp.UnixNano(), 10))}
 
 	err := r.db.Select(ctx, &getErrorWithSpanReponse, query, args...)
@@ -3639,6 +3678,247 @@ func (r *ClickHouseReader) QueryDashboardVars(ctx context.Context, query string)
 		}
 	}
 	return &result, nil
+}
+
+func (r *ClickHouseReader) GetMetricAggregateAttributes(ctx context.Context, req *v3.AggregateAttributeRequest) (*v3.AggregateAttributeResponse, error) {
+
+	var query string
+	var err error
+	var rows driver.Rows
+	var response v3.AggregateAttributeResponse
+
+	query = fmt.Sprintf("SELECT DISTINCT(metric_name) from %s.%s WHERE metric_name ILIKE $1", signozMetricDBName, signozTSTableName)
+	if req.Limit != 0 {
+		query = query + fmt.Sprintf(" LIMIT %d;", req.Limit)
+	}
+	rows, err = r.db.Query(ctx, query, fmt.Sprintf("%%%s%%", req.SearchText))
+
+	if err != nil {
+		zap.S().Error(err)
+		return nil, fmt.Errorf("error while executing query: %s", err.Error())
+	}
+	defer rows.Close()
+
+	var metricName string
+	for rows.Next() {
+		if err := rows.Scan(&metricName); err != nil {
+			return nil, fmt.Errorf("error while scanning rows: %s", err.Error())
+		}
+		key := v3.AttributeKey{
+			Key:      metricName,
+			DataType: v3.AttributeKeyDataTypeNumber,
+			Type:     v3.AttributeKeyTypeTag,
+		}
+		response.AttributeKeys = append(response.AttributeKeys, key)
+	}
+
+	return &response, nil
+}
+
+func (r *ClickHouseReader) GetMetricAttributeKeys(ctx context.Context, req *v3.FilterAttributeKeyRequest) (*v3.FilterAttributeKeyResponse, error) {
+
+	var query string
+	var err error
+	var rows driver.Rows
+	var response v3.FilterAttributeKeyResponse
+
+	// skips the internal attributes i.e attributes starting with __
+	query = fmt.Sprintf("SELECT DISTINCT arrayJoin(tagKeys) as distinctTagKey from (SELECT DISTINCT(JSONExtractKeys(labels)) tagKeys from %s.%s WHERE metric_name=$1) WHERE distinctTagKey ILIKE $2 AND distinctTagKey NOT LIKE '\\_\\_%%'", signozMetricDBName, signozTSTableName)
+	if req.Limit != 0 {
+		query = query + fmt.Sprintf(" LIMIT %d;", req.Limit)
+	}
+	rows, err = r.db.Query(ctx, query, req.AggregateAttribute, fmt.Sprintf("%%%s%%", req.SearchText))
+	if err != nil {
+		zap.S().Error(err)
+		return nil, fmt.Errorf("error while executing query: %s", err.Error())
+	}
+	defer rows.Close()
+
+	var attributeKey string
+	for rows.Next() {
+		if err := rows.Scan(&attributeKey); err != nil {
+			return nil, fmt.Errorf("error while scanning rows: %s", err.Error())
+		}
+		key := v3.AttributeKey{
+			Key:      attributeKey,
+			DataType: v3.AttributeKeyDataTypeString, // https://github.com/OpenObservability/OpenMetrics/blob/main/proto/openmetrics_data_model.proto#L64-L72.
+			Type:     v3.AttributeKeyTypeTag,
+		}
+		response.AttributeKeys = append(response.AttributeKeys, key)
+	}
+
+	return &response, nil
+}
+
+func (r *ClickHouseReader) GetMetricAttributeValues(ctx context.Context, req *v3.FilterAttributeValueRequest) (*v3.FilterAttributeValueResponse, error) {
+
+	var query string
+	var err error
+	var rows driver.Rows
+	var attributeValues v3.FilterAttributeValueResponse
+
+	query = fmt.Sprintf("SELECT DISTINCT(JSONExtractString(labels, $1)) from %s.%s WHERE metric_name=$2 AND JSONExtractString(labels, $3) ILIKE $4", signozMetricDBName, signozTSTableName)
+	if req.Limit != 0 {
+		query = query + fmt.Sprintf(" LIMIT %d;", req.Limit)
+	}
+	rows, err = r.db.Query(ctx, query, req.FilterAttributeKey, req.AggregateAttribute, req.FilterAttributeKey, fmt.Sprintf("%%%s%%", req.SearchText))
+
+	if err != nil {
+		zap.S().Error(err)
+		return nil, fmt.Errorf("error while executing query: %s", err.Error())
+	}
+	defer rows.Close()
+
+	var atrributeValue string
+	for rows.Next() {
+		if err := rows.Scan(&atrributeValue); err != nil {
+			return nil, fmt.Errorf("error while scanning rows: %s", err.Error())
+		}
+		// https://github.com/OpenObservability/OpenMetrics/blob/main/proto/openmetrics_data_model.proto#L64-L72
+		// this may change in future if we use OTLP as the data model
+		attributeValues.StringAttributeValues = append(attributeValues.StringAttributeValues, atrributeValue)
+	}
+
+	return &attributeValues, nil
+}
+
+func readRow(vars []interface{}, columnNames []string) ([]string, map[string]string, v3.Point) {
+	// Each row will have a value and a timestamp, and an optional list of label values
+	// example: {Timestamp: ..., Value: ...}
+	// The timestamp may also not present in some cases where the time series is reduced to single value
+	var point v3.Point
+
+	// groupBy is a container to hold label values for the current point
+	// example: ["frontend", "/fetch"]
+	var groupBy []string
+
+	// groupAttributes is a container to hold the key-value pairs for the current
+	// metric point.
+	// example: {"serviceName": "frontend", "operation": "/fetch"}
+	groupAttributes := make(map[string]string)
+
+	for idx, v := range vars {
+		colName := columnNames[idx]
+		switch v := v.(type) {
+		case *string:
+			// special case for returning all labels in metrics datasource
+			if colName == "fullLabels" {
+				var metric map[string]string
+				err := json.Unmarshal([]byte(*v), &metric)
+				if err != nil {
+					zap.S().Errorf("unexpected error encountered %v", err)
+				}
+				for key, val := range metric {
+					groupBy = append(groupBy, val)
+					groupAttributes[key] = val
+				}
+			} else {
+				groupBy = append(groupBy, *v)
+				groupAttributes[colName] = *v
+			}
+		case *time.Time:
+			point.Timestamp = v.UnixMilli()
+		case *float64, *float32:
+			if _, ok := constants.ReservedColumnTargetAliases[colName]; ok {
+				point.Value = float64(reflect.ValueOf(v).Elem().Float())
+			} else {
+				groupBy = append(groupBy, fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Float()))
+				groupAttributes[colName] = fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Float())
+			}
+		case *uint8, *uint64, *uint16, *uint32:
+			if _, ok := constants.ReservedColumnTargetAliases[colName]; ok {
+				point.Value = float64(reflect.ValueOf(v).Elem().Uint())
+			} else {
+				groupBy = append(groupBy, fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Uint()))
+				groupAttributes[colName] = fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Uint())
+			}
+		case *int8, *int16, *int32, *int64:
+			if _, ok := constants.ReservedColumnTargetAliases[colName]; ok {
+				point.Value = float64(reflect.ValueOf(v).Elem().Int())
+			} else {
+				groupBy = append(groupBy, fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Int()))
+				groupAttributes[colName] = fmt.Sprintf("%v", reflect.ValueOf(v).Elem().Int())
+			}
+		default:
+			zap.S().Errorf("unsupported var type %v found in metric builder query result for column %s", v, colName)
+		}
+	}
+	return groupBy, groupAttributes, point
+}
+
+func readRowsForTimeSeriesResult(rows driver.Rows, vars []interface{}, columnNames []string) ([]*v3.Series, error) {
+	// when groupBy is applied, each combination of cartesian product
+	// of attribute values is a separate series. Each item in seriesToPoints
+	// represent a unique series where the key is sorted attribute values joined
+	// by "," and the value is the list of points for that series
+
+	// For instance, group by (serviceName, operation)
+	// with two services and three operations in each will result in (maximum of) 6 series
+	// ("frontend", "order") x ("/fetch", "/fetch/{Id}", "/order")
+	//
+	// ("frontend", "/fetch")
+	// ("frontend", "/fetch/{Id}")
+	// ("frontend", "/order")
+	// ("order", "/fetch")
+	// ("order", "/fetch/{Id}")
+	// ("order", "/order")
+	seriesToPoints := make(map[string][]v3.Point)
+
+	// seriesToAttrs is a mapping of key to a map of attribute key to attribute value
+	// for each series. This is used to populate the series' attributes
+	// For instance, for the above example, the seriesToAttrs will be
+	// {
+	//   "frontend,/fetch": {"serviceName": "frontend", "operation": "/fetch"},
+	//   "frontend,/fetch/{Id}": {"serviceName": "frontend", "operation": "/fetch/{Id}"},
+	//   "frontend,/order": {"serviceName": "frontend", "operation": "/order"},
+	//   "order,/fetch": {"serviceName": "order", "operation": "/fetch"},
+	//   "order,/fetch/{Id}": {"serviceName": "order", "operation": "/fetch/{Id}"},
+	//   "order,/order": {"serviceName": "order", "operation": "/order"},
+	// }
+	seriesToAttrs := make(map[string]map[string]string)
+
+	for rows.Next() {
+		if err := rows.Scan(vars...); err != nil {
+			return nil, err
+		}
+		groupBy, groupAttributes, metricPoint := readRow(vars, columnNames)
+		sort.Strings(groupBy)
+		key := strings.Join(groupBy, "")
+		seriesToAttrs[key] = groupAttributes
+		seriesToPoints[key] = append(seriesToPoints[key], metricPoint)
+	}
+
+	var seriesList []*v3.Series
+	for key := range seriesToPoints {
+		series := v3.Series{Labels: seriesToAttrs[key], Points: seriesToPoints[key]}
+		seriesList = append(seriesList, &series)
+	}
+	return seriesList, nil
+}
+
+// GetTimeSeriesResultV3 runs the query and returns list of time series
+func (r *ClickHouseReader) GetTimeSeriesResultV3(ctx context.Context, query string) ([]*v3.Series, error) {
+
+	defer utils.Elapsed("GetTimeSeriesResultV3", query)()
+
+	rows, err := r.db.Query(ctx, query)
+
+	if err != nil {
+		zap.S().Errorf("error while reading time series result %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var (
+		columnTypes = rows.ColumnTypes()
+		columnNames = rows.Columns()
+		vars        = make([]interface{}, len(columnTypes))
+	)
+	for i := range columnTypes {
+		vars[i] = reflect.New(columnTypes[i].ScanType()).Interface()
+	}
+
+	return readRowsForTimeSeriesResult(rows, vars, columnNames)
 }
 
 func (r *ClickHouseReader) CheckClickHouse(ctx context.Context) error {
