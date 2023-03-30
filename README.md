@@ -29,7 +29,7 @@ SigNoz helps developers monitor applications and troubleshoot problems in their 
 
 👉 You can see metrics like p99 latency, error rates for your services, external API calls and individual end points.
 
-👉 You can find the root cause of the problem by going to the exact traces which are causing the problem and see detailed flamegraphs of individual request traces.
+👉 You can find the root cause of the problem by going to the exact traces which are causing the problem and see detailed flamegraphs of individual request traces
 
 👉 Run aggregates on trace data to get business relevant metrics
 
