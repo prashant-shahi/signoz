@@ -12,7 +12,8 @@ import { SideBarCollapse } from 'store/actions/app';
 import { AppState } from 'store/reducers';
 import AppReducer from 'types/reducer/app';
 
-import { styles } from './config';
+import { routeConfig, styles } from './config';
+import { getQueryString } from './helper';
 import menus from './menuItems';
 import Slack from './Slack';
 import {
@@ -29,13 +30,12 @@ function SideNav(): JSX.Element {
 	const [collapsed, setCollapsed] = useState<boolean>(
 		getLocalStorageKey(IS_SIDEBAR_COLLAPSED) === 'true',
 	);
-	const { search } = useLocation();
 	const { currentVersion, latestVersion, isCurrentVersionError } = useSelector<
 		AppState,
 		AppReducer
 	>((state) => state.app);
 
-	const { pathname } = useLocation();
+	const { pathname, search } = useLocation();
 	const { t } = useTranslation('');
 
 	const onCollapse = useCallback(() => {
@@ -48,12 +48,13 @@ function SideNav(): JSX.Element {
 
 	const onClickHandler = useCallback(
 		(to: string) => {
-			const queryParams = new URLSearchParams(search);
+			const params = new URLSearchParams(search);
+			const avialableParams = routeConfig[to];
 
-			const url = queryParams.toString();
+			const queryString = getQueryString(avialableParams, params);
 
 			if (pathname !== to) {
-				history.push(`${to}?${url}`);
+				history.push(`${to}?${queryString.join('&')}`);
 			}
 		},
 		[pathname, search],
