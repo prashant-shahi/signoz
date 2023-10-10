@@ -21,7 +21,7 @@
   <a href="https://twitter.com/SigNozHq"><b>Twitter</b></a>
 </h3>
 
----
+##
 
 SigNoz helps developers monitor applications and troubleshoot problems in their deployed applications. With SigNoz, you can:
 
