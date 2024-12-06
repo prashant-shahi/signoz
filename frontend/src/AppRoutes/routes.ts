@@ -1,9 +1,9 @@
 import ROUTES from 'constants/routes';
-import Shortcuts from 'pages/Shortcuts/Shortcuts';
-import WorkspaceBlocked from 'pages/WorkspaceLocked';
 import { RouteProps } from 'react-router-dom';
 
 import {
+	AlertHistory,
+	AlertOverview,
 	AllAlertChannels,
 	AllErrors,
 	APIKeys,
@@ -15,7 +15,9 @@ import {
 	EditAlertChannelsAlerts,
 	EditRulesPage,
 	ErrorDetails,
+	InfrastructureMonitoring,
 	IngestionSettings,
+	InstalledIntegrations,
 	LicensePage,
 	ListAllALertsPage,
 	LiveLogs,
@@ -24,17 +26,22 @@ import {
 	LogsExplorer,
 	LogsIndexToFields,
 	LogsSaveViews,
+	MessagingQueues,
+	MQDetailPage,
 	MySettings,
 	NewDashboardPage,
 	OldLogsExplorer,
 	Onboarding,
 	OrganizationSettings,
+	OrgOnboarding,
 	PasswordReset,
 	PipelinePage,
 	ServiceMapPage,
 	ServiceMetricsPage,
 	ServicesTablePage,
+	ServiceTopLevelOperationsPage,
 	SettingsPage,
+	ShortcutsPage,
 	SignupPage,
 	SomethingWentWrong,
 	StatusPage,
@@ -45,6 +52,8 @@ import {
 	TracesSaveViews,
 	UnAuthorized,
 	UsageExplorerPage,
+	WorkspaceBlocked,
+	WorkspaceSuspended,
 } from './pageComponents';
 
 const routes: AppRoutes[] = [
@@ -57,10 +66,17 @@ const routes: AppRoutes[] = [
 	},
 	{
 		path: ROUTES.GET_STARTED,
-		exact: true,
+		exact: false,
 		component: Onboarding,
 		isPrivate: true,
 		key: 'GET_STARTED',
+	},
+	{
+		path: ROUTES.ONBOARDING,
+		exact: false,
+		component: OrgOnboarding,
+		isPrivate: true,
+		key: 'ONBOARDING',
 	},
 	{
 		component: LogsIndexToFields,
@@ -82,6 +98,13 @@ const routes: AppRoutes[] = [
 		component: ServiceMetricsPage,
 		isPrivate: true,
 		key: 'SERVICE_METRICS',
+	},
+	{
+		path: ROUTES.SERVICE_TOP_LEVEL_OPERATIONS,
+		exact: true,
+		component: ServiceTopLevelOperationsPage,
+		isPrivate: true,
+		key: 'SERVICE_TOP_LEVEL_OPERATIONS',
 	},
 	{
 		path: ROUTES.SERVICE_MAP,
@@ -159,6 +182,20 @@ const routes: AppRoutes[] = [
 		component: CreateNewAlerts,
 		isPrivate: true,
 		key: 'ALERTS_NEW',
+	},
+	{
+		path: ROUTES.ALERT_HISTORY,
+		exact: true,
+		component: AlertHistory,
+		isPrivate: true,
+		key: 'ALERT_HISTORY',
+	},
+	{
+		path: ROUTES.ALERT_OVERVIEW,
+		exact: true,
+		component: AlertOverview,
+		isPrivate: true,
+		key: 'ALERT_OVERVIEW',
 	},
 	{
 		path: ROUTES.TRACE,
@@ -329,11 +366,46 @@ const routes: AppRoutes[] = [
 		key: 'WORKSPACE_LOCKED',
 	},
 	{
+		path: ROUTES.WORKSPACE_SUSPENDED,
+		exact: true,
+		component: WorkspaceSuspended,
+		isPrivate: true,
+		key: 'WORKSPACE_SUSPENDED',
+	},
+	{
 		path: ROUTES.SHORTCUTS,
 		exact: true,
-		component: Shortcuts,
+		component: ShortcutsPage,
 		isPrivate: true,
 		key: 'SHORTCUTS',
+	},
+	{
+		path: ROUTES.INTEGRATIONS,
+		exact: true,
+		component: InstalledIntegrations,
+		isPrivate: true,
+		key: 'INTEGRATIONS',
+	},
+	{
+		path: ROUTES.MESSAGING_QUEUES,
+		exact: true,
+		component: MessagingQueues,
+		key: 'MESSAGING_QUEUES',
+		isPrivate: true,
+	},
+	{
+		path: ROUTES.MESSAGING_QUEUES_DETAIL,
+		exact: true,
+		component: MQDetailPage,
+		key: 'MESSAGING_QUEUES_DETAIL',
+		isPrivate: true,
+	},
+	{
+		path: ROUTES.INFRASTRUCTURE_MONITORING_HOSTS,
+		exact: true,
+		component: InfrastructureMonitoring,
+		key: 'INFRASTRUCTURE_MONITORING_HOSTS',
+		isPrivate: true,
 	},
 ];
 
@@ -358,6 +430,9 @@ export const oldRoutes = [
 	'/logs/old-logs-explorer',
 	'/logs-explorer',
 	'/logs-explorer/live',
+	'/logs-save-views',
+	'/traces-save-views',
+	'/settings/api-keys',
 ];
 
 export const oldNewRoutesMapping: Record<string, string> = {
@@ -365,6 +440,9 @@ export const oldNewRoutesMapping: Record<string, string> = {
 	'/logs/old-logs-explorer': '/logs/old-logs-explorer',
 	'/logs-explorer': '/logs/logs-explorer',
 	'/logs-explorer/live': '/logs/logs-explorer/live',
+	'/logs-save-views': '/logs/saved-views',
+	'/traces-save-views': '/traces/saved-views',
+	'/settings/api-keys': '/settings/access-tokens',
 };
 
 export interface AppRoutes {

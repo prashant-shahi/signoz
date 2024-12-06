@@ -1,4 +1,4 @@
-import { Button, Modal, Tabs, Typography } from 'antd';
+import { Button, Modal, Row, Tabs, Tooltip, Typography } from 'antd';
 import Editor from 'components/Editor';
 import { StyledSpace } from 'components/Styled';
 import { QueryParams } from 'constants/query';
@@ -6,7 +6,8 @@ import ROUTES from 'constants/routes';
 import { useIsDarkMode } from 'hooks/useDarkMode';
 import createQueryParams from 'lib/createQueryParams';
 import history from 'lib/history';
-import { useState } from 'react';
+import { PanelRight } from 'lucide-react';
+import { Dispatch, SetStateAction, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { AppState } from 'store/reducers';
@@ -19,11 +20,17 @@ import { CardContainer, CustomSubText, styles } from './styles';
 import Tags from './Tags';
 
 function SelectedSpanDetails(props: SelectedSpanDetailsProps): JSX.Element {
-	const { tree, firstSpanStartTime } = props;
-
 	const { maxTime, minTime } = useSelector<AppState, GlobalReducer>(
 		(state) => state.globalTime,
 	);
+
+	const {
+		tree,
+		firstSpanStartTime,
+		traceStartTime = minTime,
+		traceEndTime = maxTime,
+		setCollapsed,
+	} = props;
 
 	const { id: traceId } = useParams<Params>();
 
@@ -74,7 +81,7 @@ function SelectedSpanDetails(props: SelectedSpanDetailsProps): JSX.Element {
 	];
 
 	const onLogsHandler = (): void => {
-		const query = getTraceToLogsQuery(traceId, minTime, maxTime);
+		const query = getTraceToLogsQuery(traceId, traceStartTime, traceEndTime);
 
 		history.push(
 			`${ROUTES.LOGS_EXPLORER}?${createQueryParams({
@@ -91,15 +98,14 @@ function SelectedSpanDetails(props: SelectedSpanDetailsProps): JSX.Element {
 				styledclass={[styles.selectedSpanDetailsContainer, styles.overflow]}
 				direction="vertical"
 			>
-				<Typography.Text
-					strong
-					style={{
-						marginTop: '16px',
-					}}
-				>
-					{' '}
-					Details for selected Span{' '}
-				</Typography.Text>
+				<Row align="middle" justify="space-between">
+					<Typography.Text strong>Details for selected Span</Typography.Text>
+					<Button
+						className="periscope-btn nav-item-label expand-collapse-btn"
+						icon={<PanelRight size={16} />}
+						onClick={(): void => setCollapsed((prev) => !prev)}
+					/>
+				</Row>
 
 				<Typography.Text style={{ fontWeight: 700 }}>Service</Typography.Text>
 
@@ -108,6 +114,30 @@ function SelectedSpanDetails(props: SelectedSpanDetailsProps): JSX.Element {
 				<Typography.Text style={{ fontWeight: 700 }}>Operation</Typography.Text>
 
 				<Typography>{tree.name}</Typography>
+
+				<Typography.Text style={{ fontWeight: 700 }}>SpanKind</Typography.Text>
+
+				<Typography>{tree.spanKind}</Typography>
+
+				<Typography.Text style={{ fontWeight: 700 }}>
+					StatusCodeString
+				</Typography.Text>
+
+				<Tooltip placement="left" title={tree.statusCodeString}>
+					<Typography>{tree.statusCodeString}</Typography>
+				</Tooltip>
+
+				{tree.statusMessage && (
+					<>
+						<Typography.Text style={{ fontWeight: 700 }}>
+							StatusMessage
+						</Typography.Text>
+
+						<Tooltip placement="left" title={tree.statusMessage}>
+							<Typography>{tree.statusMessage}</Typography>
+						</Tooltip>
+					</>
+				)}
 
 				<Button size="small" style={{ marginTop: '8px' }} onClick={onLogsHandler}>
 					Go to Related logs
@@ -140,10 +170,15 @@ function SelectedSpanDetails(props: SelectedSpanDetailsProps): JSX.Element {
 interface SelectedSpanDetailsProps {
 	tree?: ITraceTree;
 	firstSpanStartTime: number;
+	traceStartTime?: number;
+	traceEndTime?: number;
+	setCollapsed: Dispatch<SetStateAction<boolean>>;
 }
 
 SelectedSpanDetails.defaultProps = {
 	tree: undefined,
+	traceStartTime: undefined,
+	traceEndTime: undefined,
 };
 
 export interface ModalText {

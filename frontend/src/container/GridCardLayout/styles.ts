@@ -8,16 +8,39 @@ const ReactGridLayoutComponent = WidthProvider(RGL);
 
 interface CardProps {
 	$panelType: PANEL_TYPES;
+	isDarkMode: boolean;
 }
 
 export const Card = styled(CardComponent)<CardProps>`
 	&&& {
 		height: 100%;
 		overflow: hidden;
+		border-radius: 3px;
+		border: 1px solid var(--bg-slate-500);
+		background: linear-gradient(
+				0deg,
+				rgba(171, 189, 255, 0) 0%,
+				rgba(171, 189, 255, 0) 100%
+			),
+			#0b0c0e;
+
+		${({ isDarkMode }): StyledCSS =>
+			!isDarkMode &&
+			css`
+				border: 1px solid var(--bg-vanilla-300);
+				background: unset;
+			`}
 	}
 
 	.ant-card-body {
-		height: calc(100% - 30px);
+		${({ $panelType }): StyledCSS =>
+			$panelType === PANEL_TYPES.TABLE
+				? css`
+						height: 100%;
+				  `
+				: css`
+						height: calc(100% - 30px);
+				  `}
 		padding: 0;
 	}
 `;
@@ -28,6 +51,18 @@ interface Props {
 
 export const CardContainer = styled.div<Props>`
 	overflow: auto;
+
+	&.row-card {
+		.row-panel {
+			height: 100%;
+			display: flex;
+			justify-content: space-between;
+			background: ${({ isDarkMode }): string =>
+				isDarkMode ? 'var(--bg-ink-400)' : 'var(--bg-vanilla-300)'};
+			align-items: center;
+			overflow: hidden;
+		}
+	}
 
 	&.enable-resize {
 		:hover {
@@ -63,6 +98,7 @@ export const ReactGridLayout = styled(ReactGridLayoutComponent)`
 	margin-top: 1rem;
 	position: relative;
 	min-height: 40vh;
+	margin: 16px;
 
 	.react-grid-item.react-grid-placeholder {
 		background: grey;
@@ -80,7 +116,6 @@ export const ReactGridLayout = styled(ReactGridLayoutComponent)`
 export const ButtonContainer = styled(Space)`
 	display: flex;
 	justify-content: end;
-	margin-top: 1rem;
 `;
 
 export const Button = styled(ButtonComponent)`

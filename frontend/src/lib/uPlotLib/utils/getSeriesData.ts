@@ -1,10 +1,14 @@
+/* eslint-disable sonarjs/cognitive-complexity */
+import { PANEL_TYPES } from 'constants/queryBuilder';
 import { themeColors } from 'constants/theme';
 import getLabelName from 'lib/getLabelName';
-import { MetricRangePayloadProps } from 'types/api/metrics/getQueryRange';
+import { isUndefined } from 'lodash-es';
+import { Query } from 'types/api/queryBuilder/queryBuilderData';
 import { QueryData } from 'types/api/widgets/getQuery';
 
+import { drawStyles, lineInterpolations } from './constants';
 import { generateColor } from './generateColor';
-import getRenderer, { drawStyles, lineInterpolations } from './getRenderer';
+import getRenderer from './getRenderer';
 
 const paths = (
 	u: any,
@@ -23,16 +27,19 @@ const paths = (
 	return renderer(u, seriesIdx, idx0, idx1, extendGap, buildClip);
 };
 
-const getSeries = (
-	apiResponse?: MetricRangePayloadProps,
-	widgetMetaData: QueryData[] = [],
-	graphsVisibilityStates?: boolean[],
-): uPlot.Options['series'] => {
+const getSeries = ({
+	series,
+	widgetMetaData,
+	graphsVisibilityStates,
+	panelType,
+	hiddenGraph,
+	isDarkMode,
+}: GetSeriesProps): uPlot.Options['series'] => {
 	const configurations: uPlot.Series[] = [
 		{ label: 'Timestamp', stroke: 'purple' },
 	];
 
-	const seriesList = apiResponse?.data.result || [];
+	const seriesList = series || [];
 
 	const newGraphVisibilityStates = graphsVisibilityStates?.slice(1);
 
@@ -45,17 +52,32 @@ const getSeries = (
 			legend || '',
 		);
 
-		const color = generateColor(label, themeColors.chartcolors);
+		const color = generateColor(
+			label,
+			isDarkMode ? themeColors.chartcolors : themeColors.lightModeColor,
+		);
 
 		const pointSize = seriesList[i].values.length > 1 ? 5 : 10;
 		const showPoints = !(seriesList[i].values.length > 1);
 
 		const seriesObj: any = {
 			paths,
-			drawStyle: drawStyles.line,
-			lineInterpolation: lineInterpolations.spline,
-			show: newGraphVisibilityStates ? newGraphVisibilityStates[i] : true,
+			drawStyle:
+				panelType && panelType === PANEL_TYPES.BAR
+					? drawStyles.bars
+					: drawStyles.line,
+			lineInterpolation:
+				panelType && panelType === PANEL_TYPES.BAR
+					? null
+					: lineInterpolations.spline,
+			// eslint-disable-next-line no-nested-ternary
+			show: newGraphVisibilityStates
+				? newGraphVisibilityStates[i]
+				: !isUndefined(hiddenGraph)
+				? hiddenGraph[i]
+				: true,
 			label,
+			fill: panelType && panelType === PANEL_TYPES.BAR ? `${color}40` : undefined,
 			stroke: color,
 			width: 2,
 			spanGaps: true,
@@ -70,6 +92,19 @@ const getSeries = (
 	}
 
 	return configurations;
+};
+
+export type GetSeriesProps = {
+	series?: QueryData[];
+	widgetMetaData: QueryData[];
+	isDarkMode: boolean;
+	graphsVisibilityStates?: boolean[];
+	panelType?: PANEL_TYPES;
+	currentQuery?: Query;
+	stackBarChart?: boolean;
+	hiddenGraph?: {
+		[key: string]: boolean;
+	};
 };
 
 export default getSeries;

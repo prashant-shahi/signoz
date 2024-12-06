@@ -1,3 +1,5 @@
+import { Skeleton } from 'antd';
+import { ENTITY_VERSION_V4 } from 'constants/app';
 import { FeatureKeys } from 'constants/features';
 import { PANEL_TYPES } from 'constants/queryBuilder';
 import Graph from 'container/GridCardLayout/GridCard';
@@ -17,9 +19,14 @@ import { useParams } from 'react-router-dom';
 import { EQueryType } from 'types/common/dashboard';
 import { v4 as uuid } from 'uuid';
 
-import { Button } from '../styles';
 import { IServiceName } from '../types';
-import { handleNonInQueryRange, onViewTracePopupClick } from '../util';
+import {
+	handleNonInQueryRange,
+	onViewTracePopupClick,
+	useGetAPMToLogsQueries,
+	useGetAPMToTracesQueries,
+} from '../util';
+import GraphControlsPanel from './GraphControlsPanel/GraphControlsPanel';
 
 function ServiceOverview({
 	onDragSelect,
@@ -28,8 +35,10 @@ function ServiceOverview({
 	selectedTimeStamp,
 	topLevelOperationsRoute,
 	topLevelOperationsIsLoading,
+	stepInterval,
 }: ServiceOverviewProps): JSX.Element {
-	const { servicename } = useParams<IServiceName>();
+	const { servicename: encodedServiceName } = useParams<IServiceName>();
+	const servicename = decodeURIComponent(encodedServiceName);
 
 	const isSpanMetricEnable = useFeatureFlag(FeatureKeys.USE_SPAN_METRICS)
 		?.active;
@@ -44,63 +53,78 @@ function ServiceOverview({
 		[isSpanMetricEnable, queries],
 	);
 
-	const latencyWidget = useMemo(
-		() =>
-			getWidgetQueryBuilder({
-				query: {
-					queryType: EQueryType.QUERY_BUILDER,
-					promql: [],
-					builder: latency({
-						servicename,
-						tagFilterItems,
-						isSpanMetricEnable,
-						topLevelOperationsRoute,
-					}),
-					clickhouse_sql: [],
-					id: uuid(),
-				},
-				title: GraphTitle.LATENCY,
-				panelTypes: PANEL_TYPES.TIME_SERIES,
-				yAxisUnit: 'ns',
-				id: SERVICE_CHART_ID.latency,
+	const latencyWidget = getWidgetQueryBuilder({
+		query: {
+			queryType: EQueryType.QUERY_BUILDER,
+			promql: [],
+			builder: latency({
+				servicename,
+				tagFilterItems,
+				isSpanMetricEnable,
+				topLevelOperationsRoute,
 			}),
-		[servicename, isSpanMetricEnable, topLevelOperationsRoute, tagFilterItems],
-	);
+			clickhouse_sql: [],
+			id: uuid(),
+		},
+		title: GraphTitle.LATENCY,
+		panelTypes: PANEL_TYPES.TIME_SERIES,
+		yAxisUnit: 'ns',
+		id: SERVICE_CHART_ID.latency,
+	});
 
 	const isQueryEnabled =
 		!topLevelOperationsIsLoading && topLevelOperationsRoute.length > 0;
 
+	const apmToTraceQuery = useGetAPMToTracesQueries({ servicename });
+
+	const apmToLogQuery = useGetAPMToLogsQueries({ servicename });
+
 	return (
 		<>
-			<Button
-				type="default"
-				size="small"
+			<GraphControlsPanel
 				id="Service_button"
-				onClick={onViewTracePopupClick({
+				onViewLogsClick={onViewTracePopupClick({
 					servicename,
 					selectedTraceTags,
 					timestamp: selectedTimeStamp,
+					apmToTraceQuery: apmToLogQuery,
+					isViewLogsClicked: true,
+					stepInterval,
 				})}
-			>
-				View Traces
-			</Button>
+				onViewTracesClick={onViewTracePopupClick({
+					servicename,
+					selectedTraceTags,
+					timestamp: selectedTimeStamp,
+					apmToTraceQuery,
+					stepInterval,
+				})}
+			/>
 			<Card data-testid="service_latency">
 				<GraphContainer>
-					<Graph
-						name="service_latency"
-						onDragSelect={onDragSelect}
-						widget={latencyWidget}
-						onClickHandler={handleGraphClick('Service')}
-						isQueryEnabled={isQueryEnabled}
-						fillSpans={false}
-					/>
+					{topLevelOperationsIsLoading && (
+						<Skeleton
+							style={{
+								height: '100%',
+								padding: '16px',
+							}}
+						/>
+					)}
+					{!topLevelOperationsIsLoading && (
+						<Graph
+							onDragSelect={onDragSelect}
+							widget={latencyWidget}
+							onClickHandler={handleGraphClick('Service')}
+							isQueryEnabled={isQueryEnabled}
+							version={ENTITY_VERSION_V4}
+						/>
+					)}
 				</GraphContainer>
 			</Card>
 		</>
 	);
 }
-
 interface ServiceOverviewProps {
+	stepInterval: number;
 	selectedTimeStamp: number;
 	selectedTraceTags: string;
 	onDragSelect: (start: number, end: number) => void;

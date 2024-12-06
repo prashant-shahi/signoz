@@ -14,6 +14,7 @@ export const PANEL_TYPES_COMPONENT_MAP = {
 	[PANEL_TYPES.TRACE]: null,
 	[PANEL_TYPES.LIST]: LogsPanelComponent,
 	[PANEL_TYPES.EMPTY_WIDGET]: null,
+	[PANEL_TYPES.BAR]: Uplot,
 } as const;
 
 export const getComponentForPanelType = (
@@ -27,6 +28,9 @@ export const getComponentForPanelType = (
 		[PANEL_TYPES.TRACE]: null,
 		[PANEL_TYPES.LIST]:
 			dataSource === DataSource.LOGS ? LogsPanelComponent : TracesTableComponent,
+		[PANEL_TYPES.BAR]: Uplot,
+		[PANEL_TYPES.PIE]: null,
+		[PANEL_TYPES.HISTOGRAM]: Uplot,
 		[PANEL_TYPES.EMPTY_WIDGET]: null,
 	};
 
@@ -36,4 +40,5 @@ export const getComponentForPanelType = (
 export const AVAILABLE_EXPORT_PANEL_TYPES = [
 	PANEL_TYPES.TIME_SERIES,
 	PANEL_TYPES.TABLE,
+	PANEL_TYPES.LIST,
 ];

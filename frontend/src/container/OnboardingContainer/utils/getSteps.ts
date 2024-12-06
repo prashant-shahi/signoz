@@ -6,16 +6,30 @@ import {
 	ConfigureHostmetricsJSON,
 	ConfigureMetricsReceiver,
 	ConfigureReceiver,
+	CreateDaemonService,
 	CreateHttpPayload,
+	CreateOtelConfig,
+	CreateSidecarCollectorContainer,
 	DataSourceStep,
+	DeployTaskDefinition,
+	EcsSendData,
+	EcsSendLogsData,
 	EnvDetailsStep,
 	InstallOpenTelemetryStep,
 	LogsTestConnectionStep,
+	MonitorDashboard,
 	PlotMetrics,
 	RestartOtelCollector,
 	RunApplicationStep,
 	SelectMethodStep,
+	SendHostmetricsLogs,
+	SendLogs,
 	SendLogsCloudwatch,
+	SendMetrics,
+	SendTraces,
+	SetupAzureEventsHub,
+	SetupCentralCollectorStep,
+	SetupDaemonService,
 	SetupLogDrains,
 	SetupOtelCollectorStep,
 	StartContainer,
@@ -47,6 +61,12 @@ export const INFRASTRUCTURE_MONITORING_STEPS: SelectedModuleStepProps[] = [
 	DataSourceStep,
 ];
 
+export const AWS_MONITORING_STEPS: SelectedModuleStepProps[] = [DataSourceStep];
+
+export const AZURE_MONITORING_STEPS: SelectedModuleStepProps[] = [
+	DataSourceStep,
+];
+
 export const getSteps = ({
 	selectedDataSource,
 }: GetStepsProps): SelectedModuleStepProps[] => {
@@ -72,6 +92,7 @@ export const getSteps = ({
 		case 'fluentD':
 		case 'fluentBit':
 		case 'logStash':
+		case 'awsEc2ApplicationLogs':
 			return [
 				DataSourceStep,
 				EnvDetailsStep,
@@ -98,6 +119,7 @@ export const getSteps = ({
 		case 'kubernetesInfraMetrics':
 			return [DataSourceStep, SetupOtelCollectorStep, PlotMetrics];
 		case 'hostMetrics':
+		case 'awsEc2InfrastructureMetrics':
 			return [
 				DataSourceStep,
 				EnvDetailsStep,
@@ -111,6 +133,92 @@ export const getSteps = ({
 				SetupOtelCollectorStep,
 				ConfigureMetricsReceiver,
 			];
+		case 'awsEcsExternal':
+		case 'awsEcsEc2':
+			return [
+				DataSourceStep,
+				SetupDaemonService,
+				CreateOtelConfig,
+				CreateDaemonService,
+				EcsSendData,
+			];
+
+		case 'awsEcsFargate':
+			return [
+				DataSourceStep,
+				CreateOtelConfig,
+				CreateSidecarCollectorContainer,
+				DeployTaskDefinition,
+				EcsSendData,
+				EcsSendLogsData,
+			];
+		case 'awsEks':
+			return [DataSourceStep, SetupOtelCollectorStep, MonitorDashboard];
+		case 'azureVm':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendHostmetricsLogs,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureAks':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendTraces,
+				SendLogs,
+				SendMetrics,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureAppService':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendTraces,
+				SendLogs,
+				SendMetrics,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureFunctions':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendTraces,
+				SendLogs,
+				SendMetrics,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureContainerApps':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendTraces,
+				SendLogs,
+				SendMetrics,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureBlobStorage':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendLogs,
+				SendMetrics,
+			];
+		// eslint-disable-next-line sonarjs/no-duplicated-branches
+		case 'azureSQLDatabaseMetrics':
+			return [
+				DataSourceStep,
+				SetupAzureEventsHub,
+				SetupCentralCollectorStep,
+				SendMetrics,
+			];
+
 		default:
 			return [DataSourceStep];
 	}

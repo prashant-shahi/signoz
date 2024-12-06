@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 
 	"sync"
 
@@ -45,17 +46,17 @@ type Manager struct {
 	failedAttempts uint64
 
 	// keep track of active license and features
-	activeLicense  *model.License
-	activeFeatures basemodel.FeatureSet
+	activeLicense   *model.License
+	activeLicenseV3 *model.LicenseV3
+	activeFeatures  basemodel.FeatureSet
 }
 
-func StartManager(dbType string, db *sqlx.DB) (*Manager, error) {
-
+func StartManager(dbType string, db *sqlx.DB, useLicensesV3 bool, features ...basemodel.Feature) (*Manager, error) {
 	if LM != nil {
 		return LM, nil
 	}
 
-	repo := NewLicenseRepo(db)
+	repo := NewLicenseRepo(db, useLicensesV3)
 	err := repo.InitDB(dbType)
 
 	if err != nil {
@@ -66,7 +67,32 @@ func StartManager(dbType string, db *sqlx.DB) (*Manager, error) {
 		repo: &repo,
 	}
 
-	if err := m.start(); err != nil {
+	if useLicensesV3 {
+		// get active license from the db
+		active, err := m.repo.GetActiveLicenseV2(context.Background())
+		if err != nil {
+			return m, err
+		}
+
+		// if we have an active license then need to fetch the complete details
+		if active != nil {
+			// fetch the new license structure from control plane
+			licenseV3, apiError := validate.ValidateLicenseV3(active.Key)
+			if apiError != nil {
+				return m, apiError
+			}
+
+			// insert the licenseV3 in sqlite db
+			apiError = m.repo.InsertLicenseV3(context.Background(), licenseV3)
+			// if the license already exists move ahead.
+			if apiError != nil && apiError.Typ != model.ErrorConflict {
+				return m, apiError
+			}
+			zap.L().Info("Successfully inserted license from v2 to v3 table")
+		}
+	}
+
+	if err := m.start(useLicensesV3, features...); err != nil {
 		return m, err
 	}
 	LM = m
@@ -74,8 +100,14 @@ func StartManager(dbType string, db *sqlx.DB) (*Manager, error) {
 }
 
 // start loads active license in memory and initiates validator
-func (lm *Manager) start() error {
-	err := lm.LoadActiveLicense()
+func (lm *Manager) start(useLicensesV3 bool, features ...basemodel.Feature) error {
+
+	var err error
+	if useLicensesV3 {
+		err = lm.LoadActiveLicenseV3(features...)
+	} else {
+		err = lm.LoadActiveLicense(features...)
+	}
 
 	return err
 }
@@ -85,7 +117,7 @@ func (lm *Manager) Stop() {
 	<-lm.terminated
 }
 
-func (lm *Manager) SetActive(l *model.License) {
+func (lm *Manager) SetActive(l *model.License, features ...basemodel.Feature) {
 	lm.mutex.Lock()
 	defer lm.mutex.Unlock()
 
@@ -94,13 +126,13 @@ func (lm *Manager) SetActive(l *model.License) {
 	}
 
 	lm.activeLicense = l
-	lm.activeFeatures = l.FeatureSet
+	lm.activeFeatures = append(l.FeatureSet, features...)
 	// set default features
 	setDefaultFeatures(lm)
 
 	err := lm.InitFeatures(lm.activeFeatures)
 	if err != nil {
-		zap.S().Panicf("Couldn't activate features: %v", err)
+		zap.L().Panic("Couldn't activate features", zap.Error(err))
 	}
 	if !lm.validatorRunning {
 		// we want to make sure only one validator runs,
@@ -110,28 +142,74 @@ func (lm *Manager) SetActive(l *model.License) {
 	}
 
 }
+func (lm *Manager) SetActiveV3(l *model.LicenseV3, features ...basemodel.Feature) {
+	lm.mutex.Lock()
+	defer lm.mutex.Unlock()
+
+	if l == nil {
+		return
+	}
+
+	lm.activeLicenseV3 = l
+	lm.activeFeatures = append(l.Features, features...)
+	// set default features
+	setDefaultFeatures(lm)
+
+	err := lm.InitFeatures(lm.activeFeatures)
+	if err != nil {
+		zap.L().Panic("Couldn't activate features", zap.Error(err))
+	}
+	if !lm.validatorRunning {
+		// we want to make sure only one validator runs,
+		// we already have lock() so good to go
+		lm.validatorRunning = true
+		go lm.ValidatorV3(context.Background())
+	}
+
+}
 
 func setDefaultFeatures(lm *Manager) {
 	lm.activeFeatures = append(lm.activeFeatures, baseconstants.DEFAULT_FEATURE_SET...)
 }
 
 // LoadActiveLicense loads the most recent active license
-func (lm *Manager) LoadActiveLicense() error {
-	var err error
+func (lm *Manager) LoadActiveLicense(features ...basemodel.Feature) error {
 	active, err := lm.repo.GetActiveLicense(context.Background())
 	if err != nil {
 		return err
 	}
 	if active != nil {
-		lm.SetActive(active)
+		lm.SetActive(active, features...)
 	} else {
-		zap.S().Info("No active license found, defaulting to basic plan")
+		zap.L().Info("No active license found, defaulting to basic plan")
 		// if no active license is found, we default to basic(free) plan with all default features
 		lm.activeFeatures = model.BasicPlan
 		setDefaultFeatures(lm)
 		err := lm.InitFeatures(lm.activeFeatures)
 		if err != nil {
-			zap.S().Error("Couldn't initialize features: ", err)
+			zap.L().Error("Couldn't initialize features", zap.Error(err))
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (lm *Manager) LoadActiveLicenseV3(features ...basemodel.Feature) error {
+	active, err := lm.repo.GetActiveLicenseV3(context.Background())
+	if err != nil {
+		return err
+	}
+	if active != nil {
+		lm.SetActiveV3(active, features...)
+	} else {
+		zap.L().Info("No active license found, defaulting to basic plan")
+		// if no active license is found, we default to basic(free) plan with all default features
+		lm.activeFeatures = model.BasicPlan
+		setDefaultFeatures(lm)
+		err := lm.InitFeatures(lm.activeFeatures)
+		if err != nil {
+			zap.L().Error("Couldn't initialize features", zap.Error(err))
 			return err
 		}
 	}
@@ -149,7 +227,7 @@ func (lm *Manager) GetLicenses(ctx context.Context) (response []model.License, a
 	for _, l := range licenses {
 		l.ParsePlan()
 
-		if l.Key == lm.activeLicense.Key {
+		if lm.activeLicense != nil && l.Key == lm.activeLicense.Key {
 			l.IsCurrent = true
 		}
 
@@ -165,8 +243,31 @@ func (lm *Manager) GetLicenses(ctx context.Context) (response []model.License, a
 	return
 }
 
+func (lm *Manager) GetLicensesV3(ctx context.Context) (response []*model.LicenseV3, apiError *model.ApiError) {
+
+	licenses, err := lm.repo.GetLicensesV3(ctx)
+	if err != nil {
+		return nil, model.InternalError(err)
+	}
+
+	for _, l := range licenses {
+		if lm.activeLicenseV3 != nil && l.Key == lm.activeLicenseV3.Key {
+			l.IsCurrent = true
+		}
+		if l.ValidUntil == -1 {
+			// for subscriptions, there is no end-date as such
+			// but for showing user some validity we default one year timespan
+			l.ValidUntil = l.ValidFrom + 31556926
+		}
+		response = append(response, l)
+	}
+
+	return response, nil
+}
+
 // Validator validates license after an epoch of time
 func (lm *Manager) Validator(ctx context.Context) {
+	zap.L().Info("Validator started!")
 	defer close(lm.terminated)
 	tick := time.NewTicker(validationFrequency)
 	defer tick.Stop()
@@ -189,9 +290,34 @@ func (lm *Manager) Validator(ctx context.Context) {
 	}
 }
 
+// Validator validates license after an epoch of time
+func (lm *Manager) ValidatorV3(ctx context.Context) {
+	zap.L().Info("ValidatorV3 started!")
+	defer close(lm.terminated)
+	tick := time.NewTicker(validationFrequency)
+	defer tick.Stop()
+
+	lm.ValidateV3(ctx)
+
+	for {
+		select {
+		case <-lm.done:
+			return
+		default:
+			select {
+			case <-lm.done:
+				return
+			case <-tick.C:
+				lm.ValidateV3(ctx)
+			}
+		}
+
+	}
+}
+
 // Validate validates the current active license
 func (lm *Manager) Validate(ctx context.Context) (reterr error) {
-	zap.S().Info("License validation started")
+	zap.L().Info("License validation started")
 	if lm.activeLicense == nil {
 		return nil
 	}
@@ -201,12 +327,12 @@ func (lm *Manager) Validate(ctx context.Context) (reterr error) {
 
 		lm.lastValidated = time.Now().Unix()
 		if reterr != nil {
-			zap.S().Errorf("License validation completed with error", reterr)
+			zap.L().Error("License validation completed with error", zap.Error(reterr))
 			atomic.AddUint64(&lm.failedAttempts, 1)
 			telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_LICENSE_CHECK_FAILED,
-				map[string]interface{}{"err": reterr.Error()}, "")
+				map[string]interface{}{"err": reterr.Error()}, "", true, false)
 		} else {
-			zap.S().Info("License validation completed with no errors")
+			zap.L().Info("License validation completed with no errors")
 		}
 
 		lm.mutex.Unlock()
@@ -214,7 +340,7 @@ func (lm *Manager) Validate(ctx context.Context) (reterr error) {
 
 	response, apiError := validate.ValidateLicense(lm.activeLicense.ActivationId)
 	if apiError != nil {
-		zap.S().Errorf("failed to validate license", apiError)
+		zap.L().Error("failed to validate license", zap.Error(apiError.Err))
 		return apiError.Err
 	}
 
@@ -235,7 +361,7 @@ func (lm *Manager) Validate(ctx context.Context) (reterr error) {
 		}
 
 		if err := l.ParsePlan(); err != nil {
-			zap.S().Errorf("failed to parse updated license", zap.Error(err))
+			zap.L().Error("failed to parse updated license", zap.Error(err))
 			return err
 		}
 
@@ -245,7 +371,7 @@ func (lm *Manager) Validate(ctx context.Context) (reterr error) {
 			if err != nil {
 				// unexpected db write issue but we can let the user continue
 				// and wait for update to work in next cycle.
-				zap.S().Errorf("failed to validate license", zap.Error(err))
+				zap.L().Error("failed to validate license", zap.Error(err))
 			}
 		}
 
@@ -256,6 +382,53 @@ func (lm *Manager) Validate(ctx context.Context) (reterr error) {
 	return nil
 }
 
+func (lm *Manager) RefreshLicense(ctx context.Context) *model.ApiError {
+
+	license, apiError := validate.ValidateLicenseV3(lm.activeLicenseV3.Key)
+	if apiError != nil {
+		zap.L().Error("failed to validate license", zap.Error(apiError.Err))
+		return apiError
+	}
+
+	err := lm.repo.UpdateLicenseV3(ctx, license)
+	if err != nil {
+		return model.BadRequest(errors.Wrap(err, "failed to update the new license"))
+	}
+	lm.SetActiveV3(license)
+
+	return nil
+}
+
+func (lm *Manager) ValidateV3(ctx context.Context) (reterr error) {
+	zap.L().Info("License validation started")
+	if lm.activeLicenseV3 == nil {
+		return nil
+	}
+
+	defer func() {
+		lm.mutex.Lock()
+
+		lm.lastValidated = time.Now().Unix()
+		if reterr != nil {
+			zap.L().Error("License validation completed with error", zap.Error(reterr))
+			atomic.AddUint64(&lm.failedAttempts, 1)
+			telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_LICENSE_CHECK_FAILED,
+				map[string]interface{}{"err": reterr.Error()}, "", true, false)
+		} else {
+			zap.L().Info("License validation completed with no errors")
+		}
+
+		lm.mutex.Unlock()
+	}()
+
+	err := lm.RefreshLicense(ctx)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Activate activates a license key with signoz server
 func (lm *Manager) Activate(ctx context.Context, key string) (licenseResponse *model.License, errResponse *model.ApiError) {
 	defer func() {
@@ -263,14 +436,14 @@ func (lm *Manager) Activate(ctx context.Context, key string) (licenseResponse *m
 			userEmail, err := auth.GetEmailFromJwt(ctx)
 			if err == nil {
 				telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_LICENSE_ACT_FAILED,
-					map[string]interface{}{"err": errResponse.Err.Error()}, userEmail)
+					map[string]interface{}{"err": errResponse.Err.Error()}, userEmail, true, false)
 			}
 		}
 	}()
 
 	response, apiError := validate.ActivateLicense(key, "")
 	if apiError != nil {
-		zap.S().Errorf("failed to activate license", zap.Error(apiError.Err))
+		zap.L().Error("failed to activate license", zap.Error(apiError.Err))
 		return nil, apiError
 	}
 
@@ -284,20 +457,49 @@ func (lm *Manager) Activate(ctx context.Context, key string) (licenseResponse *m
 	err := l.ParsePlan()
 
 	if err != nil {
-		zap.S().Errorf("failed to activate license", zap.Error(err))
+		zap.L().Error("failed to activate license", zap.Error(err))
 		return nil, model.InternalError(err)
 	}
 
 	// store the license before activating it
 	err = lm.repo.InsertLicense(ctx, l)
 	if err != nil {
-		zap.S().Errorf("failed to activate license", zap.Error(err))
+		zap.L().Error("failed to activate license", zap.Error(err))
 		return nil, model.InternalError(err)
 	}
 
 	// license is valid, activate it
 	lm.SetActive(l)
 	return l, nil
+}
+
+func (lm *Manager) ActivateV3(ctx context.Context, licenseKey string) (licenseResponse *model.LicenseV3, errResponse *model.ApiError) {
+	defer func() {
+		if errResponse != nil {
+			userEmail, err := auth.GetEmailFromJwt(ctx)
+			if err == nil {
+				telemetry.GetInstance().SendEvent(telemetry.TELEMETRY_LICENSE_ACT_FAILED,
+					map[string]interface{}{"err": errResponse.Err.Error()}, userEmail, true, false)
+			}
+		}
+	}()
+
+	license, apiError := validate.ValidateLicenseV3(licenseKey)
+	if apiError != nil {
+		zap.L().Error("failed to get the license", zap.Error(apiError.Err))
+		return nil, apiError
+	}
+
+	// insert the new license to the sqlite db
+	err := lm.repo.InsertLicenseV3(ctx, license)
+	if err != nil {
+		zap.L().Error("failed to activate license", zap.Error(err))
+		return nil, err
+	}
+
+	// license is valid, activate it
+	lm.SetActiveV3(license)
+	return license, nil
 }
 
 // CheckFeature will be internally used by backend routines

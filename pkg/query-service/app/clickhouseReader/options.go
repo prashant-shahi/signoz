@@ -2,7 +2,6 @@ package clickhouseReader
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -23,6 +22,7 @@ const (
 	defaultTraceDB                 string        = "signoz_traces"
 	defaultOperationsTable         string        = "distributed_signoz_operations"
 	defaultIndexTable              string        = "distributed_signoz_index_v2"
+	defaultLocalIndexTable         string        = "signoz_index_v2"
 	defaultErrorTable              string        = "distributed_signoz_error_index_v2"
 	defaultDurationTable           string        = "distributed_durationSort"
 	defaultUsageExplorerTable      string        = "distributed_usage_explorer"
@@ -41,17 +41,16 @@ const (
 	defaultWriteBatchDelay         time.Duration = 5 * time.Second
 	defaultWriteBatchSize          int           = 10000
 	defaultEncoding                Encoding      = EncodingJSON
-)
 
-const (
-	suffixEnabled         = ".enabled"
-	suffixDatasource      = ".datasource"
-	suffixOperationsTable = ".operations-table"
-	suffixIndexTable      = ".index-table"
-	suffixSpansTable      = ".spans-table"
-	suffixWriteBatchDelay = ".write-batch-delay"
-	suffixWriteBatchSize  = ".write-batch-size"
-	suffixEncoding        = ".encoding"
+	defaultLogsLocalTableV2         string = "logs_v2"
+	defaultLogsTableV2              string = "distributed_logs_v2"
+	defaultLogsResourceLocalTableV2 string = "logs_v2_resource"
+	defaultLogsResourceTableV2      string = "distributed_logs_v2_resource"
+
+	defaultTraceIndexTableV3    string = "distributed_signoz_index_v3"
+	defaultTraceLocalTableName  string = "signoz_index_v3"
+	defaultTraceResourceTableV3 string = "distributed_traces_v3_resource"
+	defaultTraceSummaryTable    string = "distributed_trace_summary"
 )
 
 // NamespaceConfig is Clickhouse's internal configuration data
@@ -65,6 +64,7 @@ type namespaceConfig struct {
 	TraceDB                 string
 	OperationsTable         string
 	IndexTable              string
+	LocalIndexTable         string
 	DurationTable           string
 	UsageExplorerTable      string
 	SpansTable              string
@@ -84,6 +84,16 @@ type namespaceConfig struct {
 	WriteBatchSize          int
 	Encoding                Encoding
 	Connector               Connector
+
+	LogsLocalTableV2         string
+	LogsTableV2              string
+	LogsResourceLocalTableV2 string
+	LogsResourceTableV2      string
+
+	TraceIndexTableV3     string
+	TraceLocalTableNameV3 string
+	TraceResourceTableV3  string
+	TraceSummaryTable     string
 }
 
 // Connecto defines how to connect to the database
@@ -91,24 +101,23 @@ type Connector func(cfg *namespaceConfig) (clickhouse.Conn, error)
 
 func defaultConnector(cfg *namespaceConfig) (clickhouse.Conn, error) {
 	ctx := context.Background()
-	dsnURL, err := url.Parse(cfg.Datasource)
+	options, err := clickhouse.ParseDSN(cfg.Datasource)
 	if err != nil {
 		return nil, err
 	}
-	options := &clickhouse.Options{
-		Addr:         []string{dsnURL.Host},
-		MaxOpenConns: cfg.MaxOpenConns,
-		MaxIdleConns: cfg.MaxIdleConns,
-		DialTimeout:  cfg.DialTimeout,
+
+	// Check if the DSN contained any of the following options, if not set from configuration
+	if options.MaxIdleConns == 0 {
+		options.MaxIdleConns = cfg.MaxIdleConns
 	}
-	if dsnURL.Query().Get("username") != "" {
-		auth := clickhouse.Auth{
-			Username: dsnURL.Query().Get("username"),
-			Password: dsnURL.Query().Get("password"),
-		}
-		options.Auth = auth
+	if options.MaxOpenConns == 0 {
+		options.MaxOpenConns = cfg.MaxOpenConns
 	}
-	zap.S().Infof("Connecting to Clickhouse at %s, MaxIdleConns: %d, MaxOpenConns: %d, DialTimeout: %s", dsnURL.Host, options.MaxIdleConns, options.MaxOpenConns, options.DialTimeout)
+	if options.DialTimeout == 0 {
+		options.DialTimeout = cfg.DialTimeout
+	}
+
+	zap.L().Info("Connecting to Clickhouse", zap.String("at", options.Addr[0]), zap.Int("MaxIdleConns", options.MaxIdleConns), zap.Int("MaxOpenConns", options.MaxOpenConns), zap.Duration("DialTimeout", options.DialTimeout))
 	db, err := clickhouse.Open(options)
 	if err != nil {
 		return nil, err
@@ -153,6 +162,7 @@ func NewOptions(
 			TraceDB:                 defaultTraceDB,
 			OperationsTable:         defaultOperationsTable,
 			IndexTable:              defaultIndexTable,
+			LocalIndexTable:         defaultLocalIndexTable,
 			ErrorTable:              defaultErrorTable,
 			DurationTable:           defaultDurationTable,
 			UsageExplorerTable:      defaultUsageExplorerTable,
@@ -172,6 +182,16 @@ func NewOptions(
 			WriteBatchSize:          defaultWriteBatchSize,
 			Encoding:                defaultEncoding,
 			Connector:               defaultConnector,
+
+			LogsTableV2:              defaultLogsTableV2,
+			LogsLocalTableV2:         defaultLogsLocalTableV2,
+			LogsResourceTableV2:      defaultLogsResourceTableV2,
+			LogsResourceLocalTableV2: defaultLogsResourceLocalTableV2,
+
+			TraceIndexTableV3:     defaultTraceIndexTableV3,
+			TraceLocalTableNameV3: defaultTraceLocalTableName,
+			TraceResourceTableV3:  defaultTraceResourceTableV3,
+			TraceSummaryTable:     defaultTraceSummaryTable,
 		},
 		others: make(map[string]*namespaceConfig, len(otherNamespaces)),
 	}

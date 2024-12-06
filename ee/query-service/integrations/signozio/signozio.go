@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,12 +24,14 @@ const (
 )
 
 type Client struct {
-	Prefix string
+	Prefix     string
+	GatewayUrl string
 }
 
 func New() *Client {
 	return &Client{
-		Prefix: constants.LicenseSignozIo,
+		Prefix:     constants.LicenseSignozIo,
+		GatewayUrl: constants.ZeusURL,
 	}
 }
 
@@ -47,13 +50,13 @@ func ActivateLicense(key, siteId string) (*ActivationResponse, *model.ApiError) 
 	httpResponse, err := http.Post(C.Prefix+"/licenses/activate", APPLICATION_JSON, bytes.NewBuffer(reqString))
 
 	if err != nil {
-		zap.S().Errorf("failed to connect to license.signoz.io", err)
+		zap.L().Error("failed to connect to license.signoz.io", zap.Error(err))
 		return nil, model.BadRequest(fmt.Errorf("unable to connect with license.signoz.io, please check your network connection"))
 	}
 
 	httpBody, err := io.ReadAll(httpResponse.Body)
 	if err != nil {
-		zap.S().Errorf("failed to read activation response from license.signoz.io", err)
+		zap.L().Error("failed to read activation response from license.signoz.io", zap.Error(err))
 		return nil, model.BadRequest(fmt.Errorf("failed to read activation response from license.signoz.io"))
 	}
 
@@ -63,7 +66,7 @@ func ActivateLicense(key, siteId string) (*ActivationResponse, *model.ApiError) 
 	result := ActivationResult{}
 	err = json.Unmarshal(httpBody, &result)
 	if err != nil {
-		zap.S().Errorf("failed to marshal activation response from license.signoz.io", err)
+		zap.L().Error("failed to marshal activation response from license.signoz.io", zap.Error(err))
 		return nil, model.InternalError(errors.Wrap(err, "failed to marshal license activation response"))
 	}
 
@@ -112,6 +115,60 @@ func ValidateLicense(activationId string) (*ActivationResponse, *model.ApiError)
 	default:
 		return nil, model.InternalError(errors.Wrap(fmt.Errorf(string(body)),
 			"internal error received from license.signoz.io"))
+	}
+
+}
+
+func ValidateLicenseV3(licenseKey string) (*model.LicenseV3, *model.ApiError) {
+
+	// Creating an HTTP client with a timeout for better control
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", C.GatewayUrl+"/v2/licenses/me", nil)
+	if err != nil {
+		return nil, model.BadRequest(errors.Wrap(err, fmt.Sprintf("failed to create request: %w", err)))
+	}
+
+	// Setting the custom header
+	req.Header.Set("X-Signoz-Cloud-Api-Key", licenseKey)
+
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, model.BadRequest(errors.Wrap(err, fmt.Sprintf("failed to make post request: %w", err)))
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, model.BadRequest(errors.Wrap(err, fmt.Sprintf("failed to read validation response from %v", C.GatewayUrl)))
+	}
+
+	defer response.Body.Close()
+
+	switch response.StatusCode {
+	case 200:
+		a := ValidateLicenseResponse{}
+		err = json.Unmarshal(body, &a)
+		if err != nil {
+			return nil, model.BadRequest(errors.Wrap(err, "failed to marshal license validation response"))
+		}
+
+		license, err := model.NewLicenseV3(a.Data)
+		if err != nil {
+			return nil, model.BadRequest(errors.Wrap(err, "failed to generate new license v3"))
+		}
+
+		return license, nil
+	case 400:
+		return nil, model.BadRequest(errors.Wrap(fmt.Errorf(string(body)),
+			fmt.Sprintf("bad request error received from %v", C.GatewayUrl)))
+	case 401:
+		return nil, model.Unauthorized(errors.Wrap(fmt.Errorf(string(body)),
+			fmt.Sprintf("unauthorized request error received from %v", C.GatewayUrl)))
+	default:
+		return nil, model.InternalError(errors.Wrap(fmt.Errorf(string(body)),
+			fmt.Sprintf("internal request error received from %v", C.GatewayUrl)))
 	}
 
 }

@@ -1,6 +1,7 @@
 import { WarningFilled } from '@ant-design/icons';
 import { Flex, Typography } from 'antd';
 import { ResizeTable } from 'components/ResizeTable';
+import { ENTITY_VERSION_V4 } from 'constants/app';
 import { MAX_RPS_LIMIT } from 'constants/global';
 import ResourceAttributesFilter from 'container/ResourceAttributesFilter';
 import { useGetQueriesRange } from 'hooks/queryBuilder/useGetQueriesRange';
@@ -35,7 +36,7 @@ function ServiceMetricTable({
 	const { data: licenseData, isFetching } = useLicense();
 	const isCloudUserVal = isCloudUser();
 
-	const queries = useGetQueriesRange(queryRangeRequestData, {
+	const queries = useGetQueriesRange(queryRangeRequestData, ENTITY_VERSION_V4, {
 		queryKey: [
 			`GetMetricsQueryRange-${queryRangeRequestData[0].selectedTime}-${globalSelectedInterval}`,
 			maxTime,
@@ -68,7 +69,12 @@ function ServiceMetricTable({
 	const [RPS, setRPS] = useState(0);
 
 	useEffect(() => {
-		if (!isFetching && licenseData?.payload?.onTrial && isCloudUserVal) {
+		if (
+			!isFetching &&
+			licenseData?.payload?.onTrial &&
+			!licenseData?.payload?.trialConvertedToSubscription &&
+			isCloudUserVal
+		) {
 			if (services.length > 0) {
 				const rps = getTotalRPS(services);
 				setRPS(rps);
@@ -78,12 +84,18 @@ function ServiceMetricTable({
 		}
 	}, [services, licenseData, isFetching, isCloudUserVal]);
 
+	const paginationConfig = {
+		defaultPageSize: 10,
+		showTotal: (total: number, range: number[]): string =>
+			`${range[0]}-${range[1]} of ${total} items`,
+	};
 	return (
 		<>
 			{RPS > MAX_RPS_LIMIT && (
-				<Flex justify="center">
+				<Flex justify="left">
 					<Typography.Title level={5} type="warning" style={{ marginTop: 0 }}>
 						<WarningFilled /> {getText('rps_over_100')}
+						<a href="mailto:cloud-support@signoz.io">email</a>
 					</Typography.Title>
 				</Flex>
 			)}
@@ -91,11 +103,7 @@ function ServiceMetricTable({
 			<ResourceAttributesFilter />
 
 			<ResizeTable
-				pagination={{
-					defaultPageSize: 10,
-					showTotal: (total: number, range: number[]): string =>
-						`${range[0]}-${range[1]} of ${total} items`,
-				}}
+				pagination={paginationConfig}
 				columns={tableColumns}
 				loading={isLoading}
 				dataSource={services}

@@ -8,7 +8,7 @@ import {
 import ExplorerOrderBy from 'container/ExplorerOrderBy';
 import { QueryBuilder } from 'container/QueryBuilder';
 import { OrderByFilterProps } from 'container/QueryBuilder/filters/OrderByFilter/OrderByFilter.interfaces';
-import QueryBuilderSearch from 'container/QueryBuilder/filters/QueryBuilderSearch';
+import QueryBuilderSearchV2 from 'container/QueryBuilder/filters/QueryBuilderSearchV2/QueryBuilderSearchV2';
 import { QueryBuilderProps } from 'container/QueryBuilder/QueryBuilder.interfaces';
 import { useGetPanelTypesQueryParam } from 'hooks/queryBuilder/useGetPanelTypesQueryParam';
 import { useQueryBuilder } from 'hooks/queryBuilder/useQueryBuilder';
@@ -47,7 +47,7 @@ function LogExplorerQuerySection({
 		const isTable = panelTypes === PANEL_TYPES.TABLE;
 		const isList = panelTypes === PANEL_TYPES.LIST;
 		const config: QueryBuilderProps['filterConfigs'] = {
-			stepInterval: { isHidden: isTable, isDisabled: true },
+			stepInterval: { isHidden: isTable, isDisabled: false },
 			having: { isHidden: isList, isDisabled: true },
 			filters: {
 				customKey: 'body',
@@ -62,6 +62,7 @@ function LogExplorerQuerySection({
 		index: 0,
 		query,
 		filterConfigs,
+		entityVersion: '',
 	});
 
 	const renderOrderBy = useCallback(
@@ -89,7 +90,7 @@ function LogExplorerQuerySection({
 		<>
 			{selectedView === SELECTED_VIEWS.SEARCH && (
 				<div className="qb-search-view-container">
-					<QueryBuilderSearch
+					<QueryBuilderSearchV2
 						query={query}
 						onChange={handleChangeTagFilters}
 						whereClauseConfig={filterConfigs?.filters}
@@ -103,6 +104,7 @@ function LogExplorerQuerySection({
 					config={{ initialDataSource: DataSource.LOGS, queryVariant: 'static' }}
 					filterConfigs={filterConfigs}
 					queryComponents={queryComponents}
+					version="v3" // setting this to v3 as we this is rendered in logs explorer
 				/>
 			)}
 		</>

@@ -2,6 +2,7 @@ package logparsingpipeline
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -17,14 +18,19 @@ const (
 	NOOP = "noop"
 )
 
+// To ensure names used in generated collector config are never judged invalid,
+// only alphabets, digits and `-` are used when translating pipeline identifiers
+var badCharsForCollectorConfName = regexp.MustCompile("[^a-zA-Z0-9-]")
+
 func CollectorConfProcessorName(p Pipeline) string {
-	return constants.LogsPPLPfx + p.Alias
+	normalizedAlias := badCharsForCollectorConfName.ReplaceAllString(p.Alias, "-")
+	return constants.LogsPPLPfx + normalizedAlias
 }
 
 func PreparePipelineProcessor(pipelines []Pipeline) (map[string]interface{}, []string, error) {
 	processors := map[string]interface{}{}
 	names := []string{}
-	for _, v := range pipelines {
+	for pipelineIdx, v := range pipelines {
 		if !v.Enabled {
 			continue
 		}
@@ -49,7 +55,7 @@ func PreparePipelineProcessor(pipelines []Pipeline) (map[string]interface{}, []s
 				Type: "router",
 				Routes: &[]Route{
 					{
-						Output: v.Config[0].ID,
+						Output: operators[0].ID,
 						Expr:   filterExpr,
 					},
 				},
@@ -70,6 +76,12 @@ func PreparePipelineProcessor(pipelines []Pipeline) (map[string]interface{}, []s
 			Operators: v.Config,
 		}
 		name := CollectorConfProcessorName(v)
+
+		// Ensure name is unique
+		if _, nameExists := processors[name]; nameExists {
+			name = fmt.Sprintf("%s-%d", name, pipelineIdx)
+		}
+
 		processors[name] = processor
 		names = append(names, name)
 	}

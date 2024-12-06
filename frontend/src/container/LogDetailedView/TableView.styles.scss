@@ -5,11 +5,12 @@
 		.ant-table-row:hover {
 			.ant-table-cell {
 				.value-field {
-					display: flex;
-					justify-content: space-between;
-					align-items: center;
 					.action-btn {
 						display: flex;
+						position: absolute;
+						top: 50%;
+						right: 16px;
+						transform: translateY(-50%);
 						gap: 4px;
 					}
 				}
@@ -28,10 +29,36 @@
 			}
 		}
 
+		.attribute-pin {
+			cursor: pointer;
+
+			padding: 0;
+			vertical-align: middle;
+			text-align: center;
+
+			.log-attribute-pin {
+				padding: 8px;
+
+				display: flex;
+				justify-content: center;
+				align-items: center;
+
+				.pin-attribute-icon {
+					border: none;
+
+					&.pinned svg {
+						fill: var(--bg-robin-500);
+					}
+				}
+			}
+		}
+
 		.value-field-container {
 			background: rgba(22, 25, 34, 0.4);
 
 			.value-field {
+				font-family: 'Geist Mono';
+
 				position: relative;
 			}
 
@@ -49,8 +76,10 @@
 					box-shadow: none;
 					border-radius: 2px;
 					background: var(--bg-slate-400);
-
-					height: 24px;
+					padding: 2px 3px;
+					gap: 3px;
+					height: 18px;
+					width: 20px;
 				}
 			}
 		}
@@ -69,6 +98,10 @@
 
 		.value-field-container {
 			background: var(--bg-vanilla-300);
+
+			&.attribute-pin {
+				background: var(--bg-vanilla-100);
+			}
 
 			.action-btn {
 				.filter-btn {

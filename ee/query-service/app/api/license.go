@@ -9,8 +9,23 @@ import (
 
 	"go.signoz.io/signoz/ee/query-service/constants"
 	"go.signoz.io/signoz/ee/query-service/model"
+	"go.signoz.io/signoz/pkg/http/render"
 	"go.uber.org/zap"
 )
+
+type DayWiseBreakdown struct {
+	Type      string        `json:"type"`
+	Breakdown []DayWiseData `json:"breakdown"`
+}
+
+type DayWiseData struct {
+	Timestamp int64   `json:"timestamp"`
+	Count     float64 `json:"count"`
+	Size      float64 `json:"size"`
+	UnitPrice float64 `json:"unitPrice"`
+	Quantity  float64 `json:"quantity"`
+	Total     float64 `json:"total"`
+}
 
 type tierBreakdown struct {
 	UnitPrice float64 `json:"unitPrice"`
@@ -21,9 +36,10 @@ type tierBreakdown struct {
 }
 
 type usageResponse struct {
-	Type  string          `json:"type"`
-	Unit  string          `json:"unit"`
-	Tiers []tierBreakdown `json:"tiers"`
+	Type             string           `json:"type"`
+	Unit             string           `json:"unit"`
+	Tiers            []tierBreakdown  `json:"tiers"`
+	DayWiseBreakdown DayWiseBreakdown `json:"dayWiseBreakdown"`
 }
 
 type details struct {
@@ -44,6 +60,21 @@ type billingDetails struct {
 	} `json:"data"`
 }
 
+type ApplyLicenseRequest struct {
+	LicenseKey string `json:"key"`
+}
+
+type ListLicenseResponse map[string]interface{}
+
+func convertLicenseV3ToListLicenseResponse(licensesV3 []*model.LicenseV3) []ListLicenseResponse {
+	listLicenses := []ListLicenseResponse{}
+
+	for _, license := range licensesV3 {
+		listLicenses = append(listLicenses, license.Data)
+	}
+	return listLicenses
+}
+
 func (ah *APIHandler) listLicenses(w http.ResponseWriter, r *http.Request) {
 	licenses, apiError := ah.LM().GetLicenses(context.Background())
 	if apiError != nil {
@@ -53,6 +84,13 @@ func (ah *APIHandler) listLicenses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ah *APIHandler) applyLicense(w http.ResponseWriter, r *http.Request) {
+	if ah.UseLicensesV3 {
+		// if the licenses v3 is toggled on then do not apply license in v2 and run the validator!
+		// TODO: remove after migration to v3 and deprecation from zeus
+		zap.L().Info("early return from apply license v2 call")
+		render.Success(w, http.StatusOK, nil)
+		return
+	}
 	var l model.License
 
 	if err := json.NewDecoder(r.Body).Decode(&l); err != nil {
@@ -71,6 +109,68 @@ func (ah *APIHandler) applyLicense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ah.Respond(w, license)
+}
+
+func (ah *APIHandler) listLicensesV3(w http.ResponseWriter, r *http.Request) {
+	licenses, apiError := ah.LM().GetLicensesV3(r.Context())
+
+	if apiError != nil {
+		RespondError(w, apiError, nil)
+		return
+	}
+
+	ah.Respond(w, convertLicenseV3ToListLicenseResponse(licenses))
+}
+
+func (ah *APIHandler) getActiveLicenseV3(w http.ResponseWriter, r *http.Request) {
+	activeLicense, err := ah.LM().GetRepo().GetActiveLicenseV3(r.Context())
+	if err != nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorInternal, Err: err}, nil)
+		return
+	}
+	// return 404 not found if there is no active license
+	if activeLicense == nil {
+		RespondError(w, &model.ApiError{Typ: model.ErrorNotFound, Err: fmt.Errorf("no active license found")}, nil)
+		return
+	}
+
+	// TODO deprecate this when we move away from key for stripe
+	activeLicense.Data["key"] = activeLicense.Key
+	render.Success(w, http.StatusOK, activeLicense.Data)
+}
+
+// this function is called by zeus when inserting licenses in the query-service
+func (ah *APIHandler) applyLicenseV3(w http.ResponseWriter, r *http.Request) {
+	var licenseKey ApplyLicenseRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&licenseKey); err != nil {
+		RespondError(w, model.BadRequest(err), nil)
+		return
+	}
+
+	if licenseKey.LicenseKey == "" {
+		RespondError(w, model.BadRequest(fmt.Errorf("license key is required")), nil)
+		return
+	}
+
+	_, apiError := ah.LM().ActivateV3(r.Context(), licenseKey.LicenseKey)
+	if apiError != nil {
+		RespondError(w, apiError, nil)
+		return
+	}
+
+	render.Success(w, http.StatusAccepted, nil)
+}
+
+func (ah *APIHandler) refreshLicensesV3(w http.ResponseWriter, r *http.Request) {
+
+	apiError := ah.LM().RefreshLicense(r.Context())
+	if apiError != nil {
+		RespondError(w, apiError, nil)
+		return
+	}
+
+	render.Success(w, http.StatusNoContent, nil)
 }
 
 func (ah *APIHandler) checkout(w http.ResponseWriter, r *http.Request) {
@@ -139,11 +239,49 @@ func (ah *APIHandler) getBilling(w http.ResponseWriter, r *http.Request) {
 	ah.Respond(w, billingResponse.Data)
 }
 
+func convertLicenseV3ToLicenseV2(licenses []*model.LicenseV3) []model.License {
+	licensesV2 := []model.License{}
+	for _, l := range licenses {
+		planKeyFromPlanName, ok := model.MapOldPlanKeyToNewPlanName[l.PlanName]
+		if !ok {
+			planKeyFromPlanName = model.Basic
+		}
+		licenseV2 := model.License{
+			Key:               l.Key,
+			ActivationId:      "",
+			PlanDetails:       "",
+			FeatureSet:        l.Features,
+			ValidationMessage: "",
+			IsCurrent:         l.IsCurrent,
+			LicensePlan: model.LicensePlan{
+				PlanKey:    planKeyFromPlanName,
+				ValidFrom:  l.ValidFrom,
+				ValidUntil: l.ValidUntil,
+				Status:     l.Status},
+		}
+		licensesV2 = append(licensesV2, licenseV2)
+	}
+	return licensesV2
+}
+
 func (ah *APIHandler) listLicensesV2(w http.ResponseWriter, r *http.Request) {
 
-	licenses, apiError := ah.LM().GetLicenses(context.Background())
-	if apiError != nil {
-		RespondError(w, apiError, nil)
+	var licenses []model.License
+
+	if ah.UseLicensesV3 {
+		licensesV3, err := ah.LM().GetLicensesV3(r.Context())
+		if err != nil {
+			RespondError(w, err, nil)
+			return
+		}
+		licenses = convertLicenseV3ToLicenseV2(licensesV3)
+	} else {
+		_licenses, apiError := ah.LM().GetLicenses(r.Context())
+		if apiError != nil {
+			RespondError(w, apiError, nil)
+			return
+		}
+		licenses = _licenses
 	}
 
 	resp := model.Licenses{
@@ -176,7 +314,7 @@ func (ah *APIHandler) listLicensesV2(w http.ResponseWriter, r *http.Request) {
 	url := fmt.Sprintf("%s/trial?licenseKey=%s", constants.LicenseSignozIo, currentActiveLicenseKey)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		zap.S().Error("Error while creating request for trial details", err)
+		zap.L().Error("Error while creating request for trial details", zap.Error(err))
 		// If there is an error in fetching trial details, we will still return the license details
 		// to avoid blocking the UI
 		ah.Respond(w, resp)
@@ -185,7 +323,7 @@ func (ah *APIHandler) listLicensesV2(w http.ResponseWriter, r *http.Request) {
 	req.Header.Add("X-SigNoz-SecretKey", constants.LicenseAPIKey)
 	trialResp, err := hClient.Do(req)
 	if err != nil {
-		zap.S().Error("Error while fetching trial details", err)
+		zap.L().Error("Error while fetching trial details", zap.Error(err))
 		// If there is an error in fetching trial details, we will still return the license details
 		// to avoid incorrectly blocking the UI
 		ah.Respond(w, resp)
@@ -196,7 +334,7 @@ func (ah *APIHandler) listLicensesV2(w http.ResponseWriter, r *http.Request) {
 	trialRespBody, err := io.ReadAll(trialResp.Body)
 
 	if err != nil || trialResp.StatusCode != http.StatusOK {
-		zap.S().Error("Error while fetching trial details", err)
+		zap.L().Error("Error while fetching trial details", zap.Error(err))
 		// If there is an error in fetching trial details, we will still return the license details
 		// to avoid incorrectly blocking the UI
 		ah.Respond(w, resp)
@@ -207,7 +345,7 @@ func (ah *APIHandler) listLicensesV2(w http.ResponseWriter, r *http.Request) {
 	var trialRespData model.SubscriptionServerResp
 
 	if err := json.Unmarshal(trialRespBody, &trialRespData); err != nil {
-		zap.S().Error("Error while decoding trial details", err)
+		zap.L().Error("Error while decoding trial details", zap.Error(err))
 		// If there is an error in fetching trial details, we will still return the license details
 		// to avoid incorrectly blocking the UI
 		ah.Respond(w, resp)

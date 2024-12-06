@@ -3,16 +3,17 @@ import './useTableView.styles.scss';
 import Convert from 'ansi-to-html';
 import { Typography } from 'antd';
 import { ColumnsType } from 'antd/es/table';
+import cx from 'classnames';
+import { unescapeString } from 'container/LogDetailedView/utils';
 import dayjs from 'dayjs';
 import dompurify from 'dompurify';
 import { useIsDarkMode } from 'hooks/useDarkMode';
 import { FlatLogData } from 'lib/logs/flatLogData';
-import { defaultTo } from 'lodash-es';
 import { useMemo } from 'react';
+import { FORBID_DOM_PURIFY_TAGS } from 'utils/app';
 
-import LogStateIndicator, {
-	LogType,
-} from '../LogStateIndicator/LogStateIndicator';
+import LogStateIndicator from '../LogStateIndicator/LogStateIndicator';
+import { getLogIndicatorTypeForTable } from '../LogStateIndicator/utils';
 import {
 	defaultListViewPanelStyle,
 	defaultTableStyle,
@@ -32,9 +33,8 @@ export const useTableView = (props: UseTableViewProps): UseTableViewResult => {
 		logs,
 		fields,
 		linesPerRow,
+		fontSize,
 		appendTo = 'center',
-		activeContextLog,
-		activeLog,
 		isListViewPanel,
 	} = props;
 
@@ -58,7 +58,10 @@ export const useTableView = (props: UseTableViewProps): UseTableViewResult => {
 							: getDefaultCellStyle(isDarkMode),
 					},
 					children: (
-						<Typography.Paragraph ellipsis={{ rows: linesPerRow }}>
+						<Typography.Paragraph
+							ellipsis={{ rows: linesPerRow }}
+							className={cx('paragraph', fontSize)}
+						>
 							{field}
 						</Typography.Paragraph>
 					),
@@ -78,18 +81,16 @@ export const useTableView = (props: UseTableViewProps): UseTableViewResult => {
 				render: (field, item): ColumnTypeRender<Record<string, unknown>> => {
 					const date =
 						typeof field === 'string'
-							? dayjs(field).format()
-							: dayjs(field / 1e6).format();
+							? dayjs(field).format('YYYY-MM-DD HH:mm:ss.SSS')
+							: dayjs(field / 1e6).format('YYYY-MM-DD HH:mm:ss.SSS');
 					return {
 						children: (
 							<div className="table-timestamp">
 								<LogStateIndicator
-									type={defaultTo(item.log_level, LogType.INFO) as string}
-									isActive={
-										activeLog?.id === item.id || activeContextLog?.id === item.id
-									}
+									type={getLogIndicatorTypeForTable(item)}
+									fontSize={fontSize}
 								/>
-								<Typography.Paragraph ellipsis className="text">
+								<Typography.Paragraph ellipsis className={cx('text', fontSize)}>
 									{date}
 								</Typography.Paragraph>
 							</div>
@@ -109,8 +110,13 @@ export const useTableView = (props: UseTableViewProps): UseTableViewResult => {
 					children: (
 						<TableBodyContent
 							dangerouslySetInnerHTML={{
-								__html: convert.toHtml(dompurify.sanitize(field)),
+								__html: convert.toHtml(
+									dompurify.sanitize(unescapeString(field), {
+										FORBID_TAGS: [...FORBID_DOM_PURIFY_TAGS],
+									}),
+								),
 							}}
+							fontSize={fontSize}
 							linesPerRow={linesPerRow}
 							isDarkMode={isDarkMode}
 						/>
@@ -119,15 +125,7 @@ export const useTableView = (props: UseTableViewProps): UseTableViewResult => {
 			},
 			...(appendTo === 'end' ? fieldColumns : []),
 		];
-	}, [
-		fields,
-		isListViewPanel,
-		appendTo,
-		isDarkMode,
-		linesPerRow,
-		activeLog?.id,
-		activeContextLog?.id,
-	]);
+	}, [fields, isListViewPanel, appendTo, isDarkMode, linesPerRow, fontSize]);
 
 	return { columns, dataSource: flattenLogData };
 };

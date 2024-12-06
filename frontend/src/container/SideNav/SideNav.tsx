@@ -2,7 +2,9 @@
 /* eslint-disable jsx-a11y/click-events-have-key-events */
 import './SideNav.styles.scss';
 
+import { Color } from '@signozhq/design-tokens';
 import { Button } from 'antd';
+import logEvent from 'api/common/logEvent';
 import cx from 'classnames';
 import { FeatureKeys } from 'constants/features';
 import ROUTES from 'constants/routes';
@@ -14,8 +16,6 @@ import history from 'lib/history';
 import {
 	AlertTriangle,
 	CheckSquare,
-	ChevronLeftCircle,
-	ChevronRightCircle,
 	RocketIcon,
 	UserCircle,
 } from 'lucide-react';
@@ -52,13 +52,9 @@ interface UserManagementMenuItems {
 function SideNav({
 	licenseData,
 	isFetching,
-	onCollapse,
-	collapsed,
 }: {
 	licenseData: any;
 	isFetching: boolean;
-	onCollapse: () => void;
-	collapsed: boolean;
 }): JSX.Element {
 	const [menuItems, setMenuItems] = useState(defaultMenuItems);
 
@@ -94,6 +90,8 @@ function SideNav({
 
 	const { registerShortcut, deregisterShortcut } = useKeyboardHotkeys();
 
+	const isCloudUserVal = isCloudUser();
+
 	useEffect(() => {
 		if (inviteMembers) {
 			const updatedUserManagementMenuItems = [
@@ -115,10 +113,13 @@ function SideNav({
 		if (!isOnboardingEnabled || !isCloudUser()) {
 			let items = [...menuItems];
 
-			items = items.filter((item) => item.key !== ROUTES.GET_STARTED);
+			items = items.filter(
+				(item) => item.key !== ROUTES.GET_STARTED && item.key !== ROUTES.ONBOARDING,
+			);
 
 			setMenuItems(items);
 		}
+
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [featureResponse.data]);
 
@@ -133,7 +134,11 @@ function SideNav({
 						license.isCurrent && license.planKey === LICENSE_PLAN_KEY.BASIC_PLAN,
 				) || licenseData?.payload?.licenses === null;
 
-			if (role !== USER_ROLES.ADMIN || isOnBasicPlan) {
+			if (
+				role !== USER_ROLES.ADMIN ||
+				isOnBasicPlan ||
+				!(isCloudUserVal || isEECloudUser())
+			) {
 				items = items.filter((item) => item.key !== ROUTES.BILLING);
 			}
 
@@ -144,9 +149,13 @@ function SideNav({
 
 	const { t } = useTranslation('');
 
+	const licenseStatus: string =
+		licenseData?.payload?.licenses?.find((e: License) => e.isCurrent)?.status ||
+		'';
+
 	const isLicenseActive =
-		licenseData?.payload?.licenses?.find((e: License) => e.isCurrent)?.status ===
-		LICENSE_PLAN_STATUS.VALID;
+		licenseStatus?.toLocaleLowerCase() ===
+		LICENSE_PLAN_STATUS.VALID.toLocaleLowerCase();
 
 	const isEnterprise = licenseData?.payload?.licenses?.some(
 		(license: License) =>
@@ -167,6 +176,11 @@ function SideNav({
 	};
 
 	const onClickShortcuts = (e: MouseEvent): void => {
+		// eslint-disable-next-line sonarjs/no-duplicate-string
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: '/shortcuts',
+			menuLabel: 'Keyboard Shortcuts',
+		});
 		if (isCtrlMetaKey(e)) {
 			openInNewTab('/shortcuts');
 		} else {
@@ -175,6 +189,10 @@ function SideNav({
 	};
 
 	const onClickGetStarted = (event: MouseEvent): void => {
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: '/get-started',
+			menuLabel: 'Get Started',
+		});
 		if (isCtrlMetaKey(event)) {
 			openInNewTab('/get-started');
 		} else {
@@ -201,7 +219,9 @@ function SideNav({
 				if (event && isCtrlMetaKey(event)) {
 					openInNewTab(`${key}?${queryString.join('&')}`);
 				} else {
-					history.push(`${key}?${queryString.join('&')}`);
+					history.push(`${key}?${queryString.join('&')}`, {
+						from: pathname,
+					});
 				}
 			}
 		},
@@ -211,8 +231,6 @@ function SideNav({
 	const activeMenuKey = useMemo(() => getActiveMenuKeyFromPath(pathname), [
 		pathname,
 	]);
-
-	const isCloudUserVal = isCloudUser();
 
 	useEffect(() => {
 		if (isCloudUser() || isEECloudUser()) {
@@ -224,9 +242,9 @@ function SideNav({
 				key: SecondaryMenuItemKey.Version,
 				label: !isCurrentVersionError ? currentVersion : t('n_a'),
 				icon: !isLatestVersion ? (
-					<AlertTriangle color="#E87040" size={16} />
+					<AlertTriangle color={Color.BG_CHERRY_600} size={16} />
 				) : (
-					<CheckSquare color="#D5F2BB" size={16} />
+					<CheckSquare color={Color.BG_FOREST_500} size={16} />
 				),
 				onClick: onClickVersionHandler,
 			};
@@ -271,6 +289,17 @@ function SideNav({
 		}
 	}, [isCloudUserVal, isEnterprise, isFetching]);
 
+	useEffect(() => {
+		if (!(isCloudUserVal || isEECloudUser())) {
+			let updatedMenuItems = [...menuItems];
+			updatedMenuItems = updatedMenuItems.filter(
+				(item) => item.key !== ROUTES.INTEGRATIONS,
+			);
+			setMenuItems(updatedMenuItems);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
 	const [isCurrentOrgSettings] = useComponentPermission(
 		['current_org_settings'],
 		role,
@@ -290,11 +319,13 @@ function SideNav({
 		} else if (item) {
 			onClickHandler(item?.key as string, event);
 		}
+		logEvent('Sidebar: Menu clicked', {
+			menuRoute: item?.key,
+			menuLabel: item?.label,
+		});
 	};
 
 	useEffect(() => {
-		registerShortcut(GlobalShortcuts.SidebarCollapse, onCollapse);
-
 		registerShortcut(GlobalShortcuts.NavigateToServices, () =>
 			onClickHandler(ROUTES.APPLICATION, null),
 		);
@@ -310,6 +341,10 @@ function SideNav({
 			onClickHandler(ROUTES.ALL_DASHBOARD, null),
 		);
 
+		registerShortcut(GlobalShortcuts.NavigateToMessagingQueues, () =>
+			onClickHandler(ROUTES.MESSAGING_QUEUES, null),
+		);
+
 		registerShortcut(GlobalShortcuts.NavigateToAlerts, () =>
 			onClickHandler(ROUTES.LIST_ALL_ALERT, null),
 		);
@@ -318,136 +353,140 @@ function SideNav({
 		);
 
 		return (): void => {
-			deregisterShortcut(GlobalShortcuts.SidebarCollapse);
 			deregisterShortcut(GlobalShortcuts.NavigateToServices);
 			deregisterShortcut(GlobalShortcuts.NavigateToTraces);
 			deregisterShortcut(GlobalShortcuts.NavigateToLogs);
 			deregisterShortcut(GlobalShortcuts.NavigateToDashboards);
 			deregisterShortcut(GlobalShortcuts.NavigateToAlerts);
 			deregisterShortcut(GlobalShortcuts.NavigateToExceptions);
+			deregisterShortcut(GlobalShortcuts.NavigateToMessagingQueues);
 		};
-	}, [deregisterShortcut, onClickHandler, onCollapse, registerShortcut]);
+	}, [deregisterShortcut, onClickHandler, registerShortcut]);
 
 	return (
-		<div className={cx('sideNav', collapsed ? 'collapsed' : '')}>
-			<div className="brand">
-				<div
-					className="brand-logo"
-					// eslint-disable-next-line react/no-unknown-property
-					onClick={(event: MouseEvent): void => {
-						// Current home page
-						onClickHandler(ROUTES.APPLICATION, event);
-					}}
-				>
-					<img src="/Logos/signoz-brand-logo.svg" alt="SigNoz" />
-
-					{!collapsed && <span className="brand-logo-name"> SigNoz </span>}
-				</div>
-
-				{!collapsed && licenseTag && (
-					<div className="license tag">{licenseTag}</div>
-				)}
-			</div>
-
-			{isCloudUserVal && (
-				<div className="get-started-nav-items">
-					<Button
-						className="get-started-btn"
-						onClick={(event: MouseEvent): void => {
-							onClickGetStarted(event);
-						}}
-					>
-						<RocketIcon size={16} />
-
-						{!collapsed && <> Get Started </>}
-					</Button>
-				</div>
-			)}
-
-			<div className="primary-nav-items">
-				{menuItems.map((item, index) => (
-					<NavItem
-						isCollapsed={collapsed}
-						key={item.key || index}
-						item={item}
-						isActive={activeMenuKey === item.key}
-						onClick={(event): void => {
-							handleMenuItemClick(event, item);
-						}}
-					/>
-				))}
-			</div>
-
-			<div className="secondary-nav-items">
-				<NavItem
-					isCollapsed={collapsed}
-					key="keyboardShortcuts"
-					item={shortcutMenuItem}
-					isActive={false}
-					onClick={onClickShortcuts}
-				/>
-
-				{licenseData && !isLicenseActive && (
-					<NavItem
-						isCollapsed={collapsed}
-						key="trySignozCloud"
-						item={trySignozCloudMenuItem}
-						isActive={false}
-						onClick={onClickSignozCloud}
-					/>
-				)}
-
-				{userManagementMenuItems.map(
-					(item, index): JSX.Element => (
-						<NavItem
-							isCollapsed={collapsed}
-							key={item?.key || index}
-							item={item}
-							isActive={activeMenuKey === item?.key}
+		<div className={cx('sidenav-container')}>
+			<div className={cx('sideNav')}>
+				<div className="brand">
+					<div className="brand-company-meta">
+						<div
+							className="brand-logo"
+							// eslint-disable-next-line react/no-unknown-property
 							onClick={(event: MouseEvent): void => {
-								handleUserManagentMenuItemClick(item?.key as string, event);
+								// Current home page
+								onClickHandler(ROUTES.APPLICATION, event);
 							}}
+						>
+							<img src="/Logos/signoz-brand-logo.svg" alt="SigNoz" />
+
+							<span className="brand-logo-name nav-item-label"> SigNoz </span>
+						</div>
+
+						{licenseTag && (
+							<div className="license tag nav-item-label">{licenseTag}</div>
+						)}
+					</div>
+				</div>
+
+				{isCloudUserVal && (
+					<div className="get-started-nav-items">
+						<Button
+							className="get-started-btn"
+							onClick={(event: MouseEvent): void => {
+								onClickGetStarted(event);
+							}}
+						>
+							<RocketIcon size={16} />
+
+							<div className="license tag nav-item-label"> Get Started </div>
+						</Button>
+					</div>
+				)}
+
+				<div className={cx(`nav-wrapper`, isCloudUserVal && 'nav-wrapper-cloud')}>
+					<div className="primary-nav-items">
+						{menuItems.map((item, index) => (
+							<NavItem
+								key={item.key || index}
+								item={item}
+								isActive={activeMenuKey === item.key}
+								onClick={(event): void => {
+									handleMenuItemClick(event, item);
+								}}
+							/>
+						))}
+					</div>
+
+					<div className="secondary-nav-items">
+						<NavItem
+							key="keyboardShortcuts"
+							item={shortcutMenuItem}
+							isActive={false}
+							onClick={onClickShortcuts}
 						/>
-					),
-				)}
 
-				{inviteMembers && (
-					<NavItem
-						isCollapsed={collapsed}
-						key={inviteMemberMenuItem.key}
-						item={inviteMemberMenuItem}
-						isActive={activeMenuKey === inviteMemberMenuItem?.key}
-						onClick={(event: React.MouseEvent): void => {
-							if (isCtrlMetaKey(event)) {
-								openInNewTab(`${inviteMemberMenuItem.key}`);
-							} else {
-								history.push(`${inviteMemberMenuItem.key}`);
-							}
-						}}
-					/>
-				)}
+						{licenseData && !isLicenseActive && (
+							<NavItem
+								key="trySignozCloud"
+								item={trySignozCloudMenuItem}
+								isActive={false}
+								onClick={onClickSignozCloud}
+							/>
+						)}
 
-				{user && (
-					<NavItem
-						isCollapsed={collapsed}
-						key={ROUTES.MY_SETTINGS}
-						item={userSettingsMenuItem}
-						isActive={activeMenuKey === userSettingsMenuItem?.key}
-						onClick={(event: MouseEvent): void => {
-							handleUserManagentMenuItemClick(
-								userSettingsMenuItem?.key as string,
-								event,
-							);
-						}}
-					/>
-				)}
+						{userManagementMenuItems.map(
+							(item, index): JSX.Element => (
+								<NavItem
+									key={item?.key || index}
+									item={item}
+									isActive={activeMenuKey === item?.key}
+									onClick={(event: MouseEvent): void => {
+										handleUserManagentMenuItemClick(item?.key as string, event);
+										logEvent('Sidebar: Menu clicked', {
+											menuRoute: item?.key,
+											menuLabel: item?.label,
+										});
+									}}
+								/>
+							),
+						)}
 
-				<div className="collapse-expand-handlers" onClick={onCollapse}>
-					{collapsed ? (
-						<ChevronRightCircle size={18} />
-					) : (
-						<ChevronLeftCircle size={18} />
-					)}
+						{inviteMembers && (
+							<NavItem
+								key={inviteMemberMenuItem.key}
+								item={inviteMemberMenuItem}
+								isActive={activeMenuKey === inviteMemberMenuItem?.key}
+								onClick={(event: React.MouseEvent): void => {
+									if (isCtrlMetaKey(event)) {
+										openInNewTab(`${inviteMemberMenuItem.key}`);
+									} else {
+										history.push(`${inviteMemberMenuItem.key}`);
+									}
+									logEvent('Sidebar: Menu clicked', {
+										menuRoute: inviteMemberMenuItem?.key,
+										menuLabel: inviteMemberMenuItem?.label,
+									});
+								}}
+							/>
+						)}
+
+						{user && (
+							<NavItem
+								key={ROUTES.MY_SETTINGS}
+								item={userSettingsMenuItem}
+								isActive={activeMenuKey === userSettingsMenuItem?.key}
+								onClick={(event: MouseEvent): void => {
+									handleUserManagentMenuItemClick(
+										userSettingsMenuItem?.key as string,
+										event,
+									);
+									logEvent('Sidebar: Menu clicked', {
+										menuRoute: userSettingsMenuItem?.key,
+										menuLabel: 'User',
+									});
+								}}
+							/>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>

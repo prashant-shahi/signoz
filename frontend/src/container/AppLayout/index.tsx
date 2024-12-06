@@ -3,74 +3,122 @@
 /* eslint-disable jsx-a11y/anchor-is-valid */
 import './AppLayout.styles.scss';
 
+import * as Sentry from '@sentry/react';
 import { Flex } from 'antd';
-import getLocalStorageKey from 'api/browser/localstorage/get';
-import getDynamicConfigs from 'api/dynamicConfigs/getDynamicConfigs';
+import manageCreditCardApi from 'api/billing/manage';
 import getUserLatestVersion from 'api/user/getLatestVersion';
 import getUserVersion from 'api/user/getVersion';
 import cx from 'classnames';
-import { IS_SIDEBAR_COLLAPSED } from 'constants/app';
+import ChatSupportGateway from 'components/ChatSupportGateway/ChatSupportGateway';
+import OverlayScrollbar from 'components/OverlayScrollbar/OverlayScrollbar';
+import { SOMETHING_WENT_WRONG } from 'constants/api';
+import { FeatureKeys } from 'constants/features';
 import ROUTES from 'constants/routes';
 import SideNav from 'container/SideNav';
 import TopNav from 'container/TopNav';
+import dayjs from 'dayjs';
 import { useIsDarkMode } from 'hooks/useDarkMode';
+import useFeatureFlags from 'hooks/useFeatureFlag';
 import useLicense from 'hooks/useLicense';
 import { useNotifications } from 'hooks/useNotifications';
 import history from 'lib/history';
+import { isNull } from 'lodash-es';
 import ErrorBoundaryFallback from 'pages/ErrorBoundaryFallback/ErrorBoundaryFallback';
-import {
-	ReactNode,
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import { useAppContext } from 'providers/App/App';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
-import { useQueries } from 'react-query';
+import { useMutation, useQueries } from 'react-query';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { Dispatch } from 'redux';
-import { sideBarCollapse } from 'store/actions';
 import { AppState } from 'store/reducers';
 import AppActions from 'types/actions';
 import {
-	UPDATE_CONFIGS,
 	UPDATE_CURRENT_ERROR,
 	UPDATE_CURRENT_VERSION,
 	UPDATE_LATEST_VERSION,
 	UPDATE_LATEST_VERSION_ERROR,
 } from 'types/actions/app';
+import { ErrorResponse, SuccessResponse } from 'types/api';
+import { CheckoutSuccessPayloadProps } from 'types/api/billing/checkout';
+import { LicenseEvent } from 'types/api/licensesV3/getActive';
 import AppReducer from 'types/reducer/app';
-import { getFormattedDate, getRemainingDays } from 'utils/timeUtils';
+import { isCloudUser } from 'utils/app';
+import {
+	getFormattedDate,
+	getFormattedDateWithMinutes,
+	getRemainingDays,
+} from 'utils/timeUtils';
 
 import { ChildrenContainer, Layout, LayoutContent } from './styles';
 import { getRouteKey } from './utils';
 
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function AppLayout(props: AppLayoutProps): JSX.Element {
 	const { isLoggedIn, user, role } = useSelector<AppState, AppReducer>(
 		(state) => state.app,
 	);
 
-	const [collapsed, setCollapsed] = useState<boolean>(
-		getLocalStorageKey(IS_SIDEBAR_COLLAPSED) === 'true',
-	);
+	const { activeLicenseV3, isFetchingActiveLicenseV3 } = useAppContext();
+	const { notifications } = useNotifications();
+
+	const [
+		showPaymentFailedWarning,
+		setShowPaymentFailedWarning,
+	] = useState<boolean>(false);
+
+	const handleBillingOnSuccess = (
+		data: ErrorResponse | SuccessResponse<CheckoutSuccessPayloadProps, unknown>,
+	): void => {
+		if (data?.payload?.redirectURL) {
+			const newTab = document.createElement('a');
+			newTab.href = data.payload.redirectURL;
+			newTab.target = '_blank';
+			newTab.rel = 'noopener noreferrer';
+			newTab.click();
+		}
+	};
+
+	const handleBillingOnError = (): void => {
+		notifications.error({
+			message: SOMETHING_WENT_WRONG,
+		});
+	};
+
+	const {
+		mutate: manageCreditCard,
+		isLoading: isLoadingManageBilling,
+	} = useMutation(manageCreditCardApi, {
+		onSuccess: (data) => {
+			handleBillingOnSuccess(data);
+		},
+		onError: handleBillingOnError,
+	});
 
 	const isDarkMode = useIsDarkMode();
 
 	const { data: licenseData, isFetching } = useLicense();
 
+	const isPremiumChatSupportEnabled =
+		useFeatureFlags(FeatureKeys.PREMIUM_SUPPORT)?.active || false;
+
+	const isChatSupportEnabled =
+		useFeatureFlags(FeatureKeys.CHAT_SUPPORT)?.active || false;
+
+	const isCloudUserVal = isCloudUser();
+
+	const showAddCreditCardModal =
+		isLoggedIn &&
+		isChatSupportEnabled &&
+		isCloudUserVal &&
+		!isPremiumChatSupportEnabled &&
+		!licenseData?.payload?.trialConvertedToSubscription;
+
 	const { pathname } = useLocation();
 	const { t } = useTranslation(['titles']);
 
-	const [
-		getUserVersionResponse,
-		getUserLatestVersionResponse,
-		getDynamicConfigsResponse,
-	] = useQueries([
+	const [getUserVersionResponse, getUserLatestVersionResponse] = useQueries([
 		{
 			queryFn: getUserVersion,
 			queryKey: ['getUserVersion', user?.accessJwt],
@@ -80,10 +128,6 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 			queryFn: getUserLatestVersion,
 			queryKey: ['getUserLatestVersion', user?.accessJwt],
 			enabled: isLoggedIn,
-		},
-		{
-			queryFn: getDynamicConfigs,
-			queryKey: ['getDynamicConfigs', user?.accessJwt],
 		},
 	]);
 
@@ -95,15 +139,7 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 		if (getUserVersionResponse.status === 'idle' && isLoggedIn) {
 			getUserVersionResponse.refetch();
 		}
-		if (getDynamicConfigsResponse.status === 'idle') {
-			getDynamicConfigsResponse.refetch();
-		}
-	}, [
-		getUserLatestVersionResponse,
-		getUserVersionResponse,
-		isLoggedIn,
-		getDynamicConfigsResponse,
-	]);
+	}, [getUserLatestVersionResponse, getUserVersionResponse, isLoggedIn]);
 
 	const { children } = props;
 
@@ -111,17 +147,6 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 
 	const latestCurrentCounter = useRef(0);
 	const latestVersionCounter = useRef(0);
-	const latestConfigCounter = useRef(0);
-
-	const { notifications } = useNotifications();
-
-	const onCollapse = useCallback(() => {
-		setCollapsed((collapsed) => !collapsed);
-	}, []);
-
-	useLayoutEffect(() => {
-		dispatch(sideBarCollapse(collapsed));
-	}, [collapsed, dispatch]);
 
 	useEffect(() => {
 		if (
@@ -189,23 +214,6 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 				},
 			});
 		}
-
-		if (
-			getDynamicConfigsResponse.isFetched &&
-			getDynamicConfigsResponse.isSuccess &&
-			getDynamicConfigsResponse.data &&
-			getDynamicConfigsResponse.data.payload &&
-			latestConfigCounter.current === 0
-		) {
-			latestConfigCounter.current = 1;
-
-			dispatch({
-				type: UPDATE_CONFIGS,
-				payload: {
-					configs: getDynamicConfigsResponse.data.payload,
-				},
-			});
-		}
 	}, [
 		dispatch,
 		isLoggedIn,
@@ -220,9 +228,6 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 		getUserLatestVersionResponse.isFetched,
 		getUserVersionResponse.isFetched,
 		getUserLatestVersionResponse.isSuccess,
-		getDynamicConfigsResponse.data,
-		getDynamicConfigsResponse.isFetched,
-		getDynamicConfigsResponse.isSuccess,
 		notifications,
 	]);
 
@@ -231,7 +236,13 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 	const routeKey = useMemo(() => getRouteKey(pathname), [pathname]);
 	const pageTitle = t(routeKey);
 	const renderFullScreen =
-		pathname === ROUTES.GET_STARTED || pathname === ROUTES.WORKSPACE_LOCKED;
+		pathname === ROUTES.GET_STARTED ||
+		pathname === ROUTES.ONBOARDING ||
+		pathname === ROUTES.GET_STARTED_APPLICATION_MONITORING ||
+		pathname === ROUTES.GET_STARTED_INFRASTRUCTURE_MONITORING ||
+		pathname === ROUTES.GET_STARTED_LOGS_MANAGEMENT ||
+		pathname === ROUTES.GET_STARTED_AWS_MONITORING ||
+		pathname === ROUTES.GET_STARTED_AZURE_MONITORING;
 
 	const [showTrialExpiryBanner, setShowTrialExpiryBanner] = useState(false);
 
@@ -247,10 +258,35 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 		}
 	}, [licenseData, isFetching]);
 
+	useEffect(() => {
+		if (
+			!isFetchingActiveLicenseV3 &&
+			!isNull(activeLicenseV3) &&
+			activeLicenseV3?.event_queue?.event === LicenseEvent.FAILED_PAYMENT
+		) {
+			setShowPaymentFailedWarning(true);
+		}
+	}, [activeLicenseV3, isFetchingActiveLicenseV3]);
+
+	useEffect(() => {
+		// after logging out hide the trial expiry banner
+		if (!isLoggedIn) {
+			setShowTrialExpiryBanner(false);
+		}
+	}, [isLoggedIn]);
+
 	const handleUpgrade = (): void => {
 		if (role === 'ADMIN') {
 			history.push(ROUTES.BILLING);
 		}
+	};
+
+	const handleFailedPayment = (): void => {
+		manageCreditCard({
+			licenseKey: activeLicenseV3?.key || '',
+			successURL: window.location.href,
+			cancelURL: window.location.href,
+		});
 	};
 
 	const isLogsView = (): boolean =>
@@ -262,6 +298,25 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 	const isTracesView = (): boolean =>
 		routeKey === 'TRACES_EXPLORER' || routeKey === 'TRACES_SAVE_VIEWS';
 
+	const isMessagingQueues = (): boolean =>
+		routeKey === 'MESSAGING_QUEUES' || routeKey === 'MESSAGING_QUEUES_DETAIL';
+
+	const isDashboardListView = (): boolean => routeKey === 'ALL_DASHBOARD';
+	const isAlertHistory = (): boolean => routeKey === 'ALERT_HISTORY';
+	const isAlertOverview = (): boolean => routeKey === 'ALERT_OVERVIEW';
+	const isInfraMonitoringHosts = (): boolean =>
+		routeKey === 'INFRASTRUCTURE_MONITORING_HOSTS';
+	const isPathMatch = (regex: RegExp): boolean => regex.test(pathname);
+
+	const isDashboardView = (): boolean =>
+		isPathMatch(/^\/dashboard\/[a-zA-Z0-9_-]+$/);
+
+	const isDashboardWidgetView = (): boolean =>
+		isPathMatch(/^\/dashboard\/[a-zA-Z0-9_-]+\/new$/);
+
+	const isTraceDetailsView = (): boolean =>
+		isPathMatch(/^\/trace\/[a-zA-Z0-9]+(\?.*)?$/);
+
 	useEffect(() => {
 		if (isDarkMode) {
 			document.body.classList.remove('lightMode');
@@ -272,20 +327,13 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 		}
 	}, [isDarkMode]);
 
-	const isSideNavCollapsed = getLocalStorageKey(IS_SIDEBAR_COLLAPSED);
-
 	return (
-		<Layout
-			className={cx(
-				isDarkMode ? 'darkMode' : 'lightMode',
-				isSideNavCollapsed ? 'sidebarCollapsed' : '',
-			)}
-		>
+		<Layout className={cx(isDarkMode ? 'darkMode' : 'lightMode')}>
 			<Helmet>
 				<title>{pageTitle}</title>
 			</Helmet>
 
-			{showTrialExpiryBanner && (
+			{showTrialExpiryBanner && !showPaymentFailedWarning && (
 				<div className="trial-expiry-banner">
 					You are in free trial period. Your free trial will end on{' '}
 					<span>
@@ -305,31 +353,73 @@ function AppLayout(props: AppLayoutProps): JSX.Element {
 					)}
 				</div>
 			)}
+			{!showTrialExpiryBanner && showPaymentFailedWarning && (
+				<div className="payment-failed-banner">
+					Your bill payment has failed. Your workspace will get suspended on{' '}
+					<span>
+						{getFormattedDateWithMinutes(
+							dayjs(activeLicenseV3?.event_queue?.scheduled_at).unix() || Date.now(),
+						)}
+						.
+					</span>
+					{role === 'ADMIN' ? (
+						<span>
+							{' '}
+							Please{' '}
+							<a
+								className="upgrade-link"
+								onClick={(): void => {
+									if (!isLoadingManageBilling) {
+										handleFailedPayment();
+									}
+								}}
+							>
+								pay the bill
+							</a>
+							to continue using SigNoz features.
+						</span>
+					) : (
+						' Please contact your administrator to pay the bill.'
+					)}
+				</div>
+			)}
 
 			<Flex className={cx('app-layout', isDarkMode ? 'darkMode' : 'lightMode')}>
 				{isToDisplayLayout && !renderFullScreen && (
-					<SideNav
-						licenseData={licenseData}
-						isFetching={isFetching}
-						onCollapse={onCollapse}
-						collapsed={collapsed}
-					/>
+					<SideNav licenseData={licenseData} isFetching={isFetching} />
 				)}
-				<div className={cx('app-content', collapsed ? 'collapsed' : '')}>
-					<ErrorBoundary FallbackComponent={ErrorBoundaryFallback}>
-						<LayoutContent>
-							<ChildrenContainer
-								style={{
-									margin: isLogsView() || isTracesView() ? 0 : ' 0 1rem',
-								}}
-							>
-								{isToDisplayLayout && !renderFullScreen && <TopNav />}
-								{children}
-							</ChildrenContainer>
+				<div className="app-content" data-overlayscrollbars-initialize>
+					<Sentry.ErrorBoundary fallback={<ErrorBoundaryFallback />}>
+						<LayoutContent data-overlayscrollbars-initialize>
+							<OverlayScrollbar>
+								<ChildrenContainer
+									style={{
+										margin:
+											isLogsView() ||
+											isTracesView() ||
+											isDashboardView() ||
+											isDashboardWidgetView() ||
+											isDashboardListView() ||
+											isAlertHistory() ||
+											isAlertOverview() ||
+											isMessagingQueues() ||
+											isInfraMonitoringHosts()
+												? 0
+												: '0 1rem',
+
+										...(isTraceDetailsView() ? { marginRight: 0 } : {}),
+									}}
+								>
+									{isToDisplayLayout && !renderFullScreen && <TopNav />}
+									{children}
+								</ChildrenContainer>
+							</OverlayScrollbar>
 						</LayoutContent>
-					</ErrorBoundary>
+					</Sentry.ErrorBoundary>
 				</div>
 			</Flex>
+
+			{showAddCreditCardModal && <ChatSupportGateway />}
 		</Layout>
 	);
 }

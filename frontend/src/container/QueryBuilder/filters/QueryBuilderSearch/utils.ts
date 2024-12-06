@@ -1,11 +1,13 @@
 import { OPERATORS } from 'constants/queryBuilder';
 import { MetricsType } from 'container/MetricsApplication/constant';
+import { queryFilterTags } from 'hooks/queryBuilder/useTag';
 import { parse } from 'papaparse';
+import { TagFilter } from 'types/api/queryBuilder/queryBuilderData';
 
 import { orderByValueDelimiter } from '../OrderByFilter/utils';
 
 // eslint-disable-next-line no-useless-escape
-export const tagRegexp = /^\s*(.*?)\s*(IN|NOT_IN|LIKE|NOT_LIKE|REGEX|NOT_REGEX|=|!=|EXISTS|NOT_EXISTS|CONTAINS|NOT_CONTAINS|>=|>|<=|<|HAS|NHAS)\s*(.*)$/g;
+export const tagRegexp = /^\s*(.*?)\s*(\bIN\b|\bNOT_IN\b|\bLIKE\b|\bNOT_LIKE\b|\bREGEX\b|\bNOT_REGEX\b|=|!=|\bEXISTS\b|\bNOT_EXISTS\b|\bCONTAINS\b|\bNOT_CONTAINS\b|>=|>|<=|<|\bHAS\b|\bNHAS\b)\s*(.*)$/gi;
 
 export function isInNInOperator(value: string): boolean {
 	return value === OPERATORS.IN || value === OPERATORS.NIN;
@@ -25,8 +27,8 @@ export function getTagToken(tag: string): ITagToken {
 		const [, matchTagKey, matchTagOperator, matchTagValue] = match;
 		return {
 			tagKey: matchTagKey,
-			tagOperator: matchTagOperator,
-			tagValue: isInNInOperator(matchTagOperator)
+			tagOperator: matchTagOperator.toUpperCase(),
+			tagValue: isInNInOperator(matchTagOperator.toUpperCase())
 				? parse(matchTagValue).data.flat()
 				: matchTagValue,
 		} as ITagToken;
@@ -161,4 +163,18 @@ export function getOptionType(label: string): MetricsType | undefined {
 	}
 
 	return optionType;
+}
+
+/**
+ *
+ * @param exampleQueries the example queries based on recommendation engine
+ * @returns the data formatted to the Option[]
+ */
+export function convertExampleQueriesToOptions(
+	exampleQueries: TagFilter[],
+): { label: string; value: TagFilter }[] {
+	return exampleQueries.map((query) => ({
+		value: query,
+		label: queryFilterTags(query).join(' , '),
+	}));
 }

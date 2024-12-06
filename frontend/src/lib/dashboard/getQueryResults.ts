@@ -6,7 +6,10 @@ import { getMetricsQueryRange } from 'api/metrics/getQueryRange';
 import { PANEL_TYPES } from 'constants/queryBuilder';
 import { timePreferenceType } from 'container/NewWidget/RightContainer/timeItems';
 import { Time } from 'container/TopNav/DateTimeSelection/config';
-import { Time as TimeV2 } from 'container/TopNav/DateTimeSelectionV2/config';
+import {
+	CustomTimeType,
+	Time as TimeV2,
+} from 'container/TopNav/DateTimeSelectionV2/config';
 import { Pagination } from 'hooks/queryPagination';
 import { convertNewDataToOld } from 'lib/newQueryBuilder/convertNewDataToOld';
 import { isEmpty } from 'lodash-es';
@@ -18,16 +21,29 @@ import { prepareQueryRangePayload } from './prepareQueryRangePayload';
 
 export async function GetMetricQueryRange(
 	props: GetQueryResultsProps,
+	version: string,
 	signal?: AbortSignal,
+	headers?: Record<string, string>,
+	isInfraMonitoring?: boolean,
 ): Promise<SuccessResponse<MetricRangePayloadProps>> {
 	const { legendMap, queryPayload } = prepareQueryRangePayload(props);
-
-	const response = await getMetricsQueryRange(queryPayload, signal);
+	const response = await getMetricsQueryRange(
+		queryPayload,
+		version || 'v3',
+		signal,
+		headers,
+	);
 
 	if (response.statusCode >= 400) {
-		throw new Error(
-			`API responded with ${response.statusCode} -  ${response.error}`,
-		);
+		let error = `API responded with ${response.statusCode} -  ${response.error} status: ${response.message}`;
+		if (response.body && !isEmpty(response.body)) {
+			error = `${error}, errors: ${response.body}`;
+		}
+		throw new Error(error);
+	}
+
+	if (props.formatForWeb) {
+		return response;
 	}
 
 	if (response.payload?.data?.result) {
@@ -55,6 +71,19 @@ export async function GetMetricQueryRange(
 			},
 		);
 	}
+
+	if (response.payload?.data?.newResult?.data?.resultType === 'anomaly') {
+		response.payload.data.newResult.data.result = response.payload.data.newResult.data.result.map(
+			(queryData) => {
+				if (legendMap[queryData.queryName]) {
+					queryData.legend = legendMap[queryData.queryName];
+				}
+
+				return queryData;
+			},
+		);
+	}
+
 	return response;
 }
 
@@ -62,11 +91,15 @@ export interface GetQueryResultsProps {
 	query: Query;
 	graphType: PANEL_TYPES;
 	selectedTime: timePreferenceType;
-	globalSelectedInterval: Time | TimeV2;
+	globalSelectedInterval?: Time | TimeV2 | CustomTimeType;
 	variables?: Record<string, unknown>;
 	params?: Record<string, unknown>;
+	fillGaps?: boolean;
+	formatForWeb?: boolean;
 	tableParams?: {
 		pagination?: Pagination;
 		selectColumns?: any;
 	};
+	start?: number;
+	end?: number;
 }

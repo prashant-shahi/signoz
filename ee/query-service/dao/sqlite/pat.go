@@ -13,7 +13,7 @@ import (
 
 func (m *modelDao) CreatePAT(ctx context.Context, p model.PAT) (model.PAT, basemodel.BaseApiError) {
 	result, err := m.DB().ExecContext(ctx,
-		"INSERT INTO personal_access_tokens (user_id, token, role, name, created_at, expires_at, updated_at, updated_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		"INSERT INTO personal_access_tokens (user_id, token, role, name, created_at, expires_at, updated_at, updated_by_user_id, last_used, revoked) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 		p.UserID,
 		p.Token,
 		p.Role,
@@ -22,14 +22,16 @@ func (m *modelDao) CreatePAT(ctx context.Context, p model.PAT) (model.PAT, basem
 		p.ExpiresAt,
 		p.UpdatedAt,
 		p.UpdatedByUserID,
+		p.LastUsed,
+		p.Revoked,
 	)
 	if err != nil {
-		zap.S().Errorf("Failed to insert PAT in db, err: %v", zap.Error(err))
+		zap.L().Error("Failed to insert PAT in db, err: %v", zap.Error(err))
 		return model.PAT{}, model.InternalError(fmt.Errorf("PAT insertion failed"))
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
-		zap.S().Errorf("Failed to get last inserted id, err: %v", zap.Error(err))
+		zap.L().Error("Failed to get last inserted id, err: %v", zap.Error(err))
 		return model.PAT{}, model.InternalError(fmt.Errorf("PAT insertion failed"))
 	}
 	p.Id = strconv.Itoa(int(id))
@@ -60,7 +62,7 @@ func (m *modelDao) UpdatePAT(ctx context.Context, p model.PAT, id string) basemo
 		p.UpdatedByUserID,
 		id)
 	if err != nil {
-		zap.S().Errorf("Failed to update PAT in db, err: %v", zap.Error(err))
+		zap.L().Error("Failed to update PAT in db, err: %v", zap.Error(err))
 		return model.InternalError(fmt.Errorf("PAT update failed"))
 	}
 	return nil
@@ -72,17 +74,17 @@ func (m *modelDao) UpdatePATLastUsed(ctx context.Context, token string, lastUsed
 		lastUsed,
 		token)
 	if err != nil {
-		zap.S().Errorf("Failed to update PAT last used in db, err: %v", zap.Error(err))
+		zap.L().Error("Failed to update PAT last used in db, err: %v", zap.Error(err))
 		return model.InternalError(fmt.Errorf("PAT last used update failed"))
 	}
 	return nil
 }
 
-func (m *modelDao) ListPATs(ctx context.Context, userID string) ([]model.PAT, basemodel.BaseApiError) {
+func (m *modelDao) ListPATs(ctx context.Context) ([]model.PAT, basemodel.BaseApiError) {
 	pats := []model.PAT{}
 
-	if err := m.DB().Select(&pats, `SELECT * FROM personal_access_tokens WHERE user_id=? and revoked=false ORDER by updated_at DESC;`, userID); err != nil {
-		zap.S().Errorf("Failed to fetch PATs for user: %s, err: %v", userID, zap.Error(err))
+	if err := m.DB().Select(&pats, "SELECT * FROM personal_access_tokens WHERE revoked=false ORDER by updated_at DESC;"); err != nil {
+		zap.L().Error("Failed to fetch PATs err: %v", zap.Error(err))
 		return nil, model.InternalError(fmt.Errorf("failed to fetch PATs"))
 	}
 	for i := range pats {
@@ -127,7 +129,7 @@ func (m *modelDao) RevokePAT(ctx context.Context, id string, userID string) base
 		"UPDATE personal_access_tokens SET revoked=true, updated_by_user_id = $1, updated_at=$2 WHERE id=$3",
 		userID, updatedAt, id)
 	if err != nil {
-		zap.S().Errorf("Failed to revoke PAT in db, err: %v", zap.Error(err))
+		zap.L().Error("Failed to revoke PAT in db, err: %v", zap.Error(err))
 		return model.InternalError(fmt.Errorf("PAT revoke failed"))
 	}
 	return nil

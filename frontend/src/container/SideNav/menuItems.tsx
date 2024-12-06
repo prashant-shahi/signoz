@@ -1,21 +1,24 @@
 import { RocketOutlined } from '@ant-design/icons';
 import ROUTES from 'constants/routes';
 import {
-	AreaChart,
 	BarChart2,
 	BellDot,
+	Boxes,
 	BugIcon,
 	Cloudy,
 	DraftingCompass,
 	FileKey2,
 	Layers2,
 	LayoutGrid,
+	ListMinus,
 	MessageSquare,
 	Receipt,
 	Route,
 	ScrollText,
 	Settings,
 	Slack,
+	Unplug,
+	// Unplug,
 	UserPlus,
 } from 'lucide-react';
 
@@ -70,7 +73,7 @@ const menuItems: SidebarItem[] = [
 		icon: <BarChart2 size={16} />,
 	},
 	{
-		key: ROUTES.TRACE,
+		key: ROUTES.TRACES_EXPLORER,
 		label: 'Traces',
 		icon: <DraftingCompass size={16} />,
 	},
@@ -80,14 +83,30 @@ const menuItems: SidebarItem[] = [
 		icon: <ScrollText size={16} />,
 	},
 	{
+		key: ROUTES.INFRASTRUCTURE_MONITORING_HOSTS,
+		label: 'Infra Monitoring',
+		icon: <Boxes size={16} />,
+		isNew: true,
+	},
+	{
 		key: ROUTES.ALL_DASHBOARD,
 		label: 'Dashboards',
 		icon: <LayoutGrid size={16} />,
 	},
 	{
+		key: ROUTES.MESSAGING_QUEUES,
+		label: 'Messaging Queues',
+		icon: <ListMinus size={16} />,
+	},
+	{
 		key: ROUTES.LIST_ALL_ALERT,
 		label: 'Alerts',
 		icon: <BellDot size={16} />,
+	},
+	{
+		key: ROUTES.INTEGRATIONS,
+		label: 'Integrations',
+		icon: <Unplug size={16} />,
 	},
 	{
 		key: ROUTES.ALL_ERROR,
@@ -98,11 +117,7 @@ const menuItems: SidebarItem[] = [
 		key: ROUTES.SERVICE_MAP,
 		label: 'Service Map',
 		icon: <Route size={16} />,
-	},
-	{
-		key: ROUTES.USAGE_EXPLORER,
-		label: 'Usage Explorer',
-		icon: <AreaChart size={16} />,
+		isBeta: true,
 	},
 	{
 		key: ROUTES.BILLING,
@@ -118,8 +133,8 @@ const menuItems: SidebarItem[] = [
 
 /** Mapping of some newly added routes and their corresponding active sidebar menu key */
 export const NEW_ROUTES_MENU_ITEM_KEY_MAP: Record<string, string> = {
-	[ROUTES.TRACES_EXPLORER]: ROUTES.TRACE,
-	[ROUTES.TRACE_EXPLORER]: ROUTES.TRACE,
+	[ROUTES.TRACE]: ROUTES.TRACES_EXPLORER,
+	[ROUTES.TRACE_EXPLORER]: ROUTES.TRACES_EXPLORER,
 	[ROUTES.LOGS_BASE]: ROUTES.LOGS_EXPLORER,
 };
 

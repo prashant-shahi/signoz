@@ -68,7 +68,7 @@ type ExpiryOption = {
 	label: string;
 };
 
-const EXPIRATION_WITHIN_SEVEN_DAYS = 7;
+export const EXPIRATION_WITHIN_SEVEN_DAYS = 7;
 
 const API_KEY_EXPIRY_OPTIONS: ExpiryOption[] = [
 	{ value: '1', label: '1 day' },
@@ -78,6 +78,25 @@ const API_KEY_EXPIRY_OPTIONS: ExpiryOption[] = [
 	{ value: '365', label: '1 year' },
 	{ value: '0', label: 'No Expiry' },
 ];
+
+export const isExpiredToken = (expiryTimestamp: number): boolean => {
+	if (expiryTimestamp === 0) {
+		return false;
+	}
+	const currentTime = dayjs();
+	const tokenExpiresAt = dayjs.unix(expiryTimestamp);
+	return tokenExpiresAt.isBefore(currentTime);
+};
+
+export const getDateDifference = (
+	createdTimestamp: number,
+	expiryTimestamp: number,
+): number => {
+	const differenceInSeconds = Math.abs(expiryTimestamp - createdTimestamp);
+
+	// Convert seconds to days
+	return differenceInSeconds / (60 * 60 * 24);
+};
 
 function APIKeys(): JSX.Element {
 	const { user } = useSelector<AppState, AppReducer>((state) => state.app);
@@ -311,25 +330,6 @@ function APIKeys(): JSX.Element {
 		hideAddViewModal();
 	};
 
-	const getDateDifference = (
-		createdTimestamp: number,
-		expiryTimestamp: number,
-	): number => {
-		const differenceInSeconds = Math.abs(expiryTimestamp - createdTimestamp);
-
-		// Convert seconds to days
-		return differenceInSeconds / (60 * 60 * 24);
-	};
-
-	const isExpiredToken = (expiryTimestamp: number): boolean => {
-		if (expiryTimestamp === 0) {
-			return false;
-		}
-		const currentTime = dayjs();
-		const tokenExpiresAt = dayjs.unix(expiryTimestamp);
-		return tokenExpiresAt.isBefore(currentTime);
-	};
-
 	const columns: TableProps<APIKeyProps>['columns'] = [
 		{
 			title: 'API Key',
@@ -514,15 +514,15 @@ function APIKeys(): JSX.Element {
 		<div className="api-key-container">
 			<div className="api-key-content">
 				<header>
-					<Typography.Title className="title">API Keys</Typography.Title>
+					<Typography.Title className="title">Access Tokens </Typography.Title>
 					<Typography.Text className="subtitle">
-						Create and manage access keys for the SigNoz API
+						Create and manage access tokens for the SigNoz API
 					</Typography.Text>
 				</header>
 
 				<div className="api-keys-search-add-new">
 					<Input
-						placeholder="Search for keys..."
+						placeholder="Search for token..."
 						prefix={<Search size={12} color={Color.BG_VANILLA_400} />}
 						value={searchValue}
 						onChange={handleSearch}
@@ -533,7 +533,7 @@ function APIKeys(): JSX.Element {
 						type="primary"
 						onClick={showAddModal}
 					>
-						<Plus size={14} /> New Key
+						<Plus size={14} /> New Token
 					</Button>
 				</div>
 
@@ -546,7 +546,7 @@ function APIKeys(): JSX.Element {
 						pageSize: 5,
 						hideOnSinglePage: true,
 						showTotal: (total: number, range: number[]): string =>
-							`${range[0]}-${range[1]} of ${total} API Keys`,
+							`${range[0]}-${range[1]} of ${total} tokens`,
 					}}
 				/>
 			</div>
@@ -554,7 +554,7 @@ function APIKeys(): JSX.Element {
 			{/* Delete Key Modal */}
 			<Modal
 				className="delete-api-key-modal"
-				title={<span className="title">Delete key</span>}
+				title={<span className="title">Delete Token</span>}
 				open={isDeleteModalOpen}
 				closable
 				afterClose={handleModalClose}
@@ -576,7 +576,7 @@ function APIKeys(): JSX.Element {
 						onClick={onDeleteHandler}
 						className="delete-btn"
 					>
-						Delete key
+						Delete Token
 					</Button>,
 				]}
 			>
@@ -590,7 +590,7 @@ function APIKeys(): JSX.Element {
 			{/* Edit Key Modal */}
 			<Modal
 				className="api-key-modal"
-				title="Edit key"
+				title="Edit token"
 				open={isEditModalOpen}
 				key="edit-api-key-modal"
 				afterClose={handleModalClose}
@@ -614,7 +614,7 @@ function APIKeys(): JSX.Element {
 						icon={<Check size={14} />}
 						onClick={onUpdateApiKey}
 					>
-						Update key
+						Update Token
 					</Button>,
 				]}
 			>
@@ -634,7 +634,7 @@ function APIKeys(): JSX.Element {
 						label="Name"
 						rules={[{ required: true }, { type: 'string', min: 6 }]}
 					>
-						<Input placeholder="Enter Key Name" autoFocus />
+						<Input placeholder="Enter Token Name" autoFocus />
 					</Form.Item>
 
 					<Form.Item name="role" label="Role">
@@ -668,7 +668,7 @@ function APIKeys(): JSX.Element {
 			{/* Create New Key Modal */}
 			<Modal
 				className="api-key-modal"
-				title="Create new key"
+				title="Create new token"
 				open={isAddModalOpen}
 				key="create-api-key-modal"
 				closable
@@ -685,7 +685,7 @@ function APIKeys(): JSX.Element {
 									onClick={handleCopyClose}
 									icon={<Check size={12} />}
 								>
-									Copy key and close
+									Copy token and close
 								</Button>,
 						  ]
 						: [
@@ -706,7 +706,7 @@ function APIKeys(): JSX.Element {
 									loading={isLoadingCreateAPIKey}
 									onClick={onCreateAPIKey}
 								>
-									Create new key
+									Create new token
 								</Button>,
 						  ]
 				}
@@ -730,7 +730,7 @@ function APIKeys(): JSX.Element {
 							rules={[{ required: true }, { type: 'string', min: 6 }]}
 							validateTrigger="onFinish"
 						>
-							<Input placeholder="Enter Key Name" autoFocus />
+							<Input placeholder="Enter Token Name" autoFocus />
 						</Form.Item>
 
 						<Form.Item name="role" label="Role">
@@ -771,7 +771,7 @@ function APIKeys(): JSX.Element {
 				{showNewAPIKeyDetails && (
 					<div className="api-key-info-container">
 						<Row>
-							<Col span={8}>Key</Col>
+							<Col span={8}>Token</Col>
 							<Col span={16}>
 								<span className="copyable-text">
 									<Typography.Text>

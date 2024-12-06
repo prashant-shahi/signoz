@@ -6,6 +6,7 @@ import { VIEW_TYPES } from 'components/LogDetail/constants';
 // components
 import ListLogView from 'components/Logs/ListLogView';
 import RawLogView from 'components/Logs/RawLogView';
+import OverlayScrollbar from 'components/OverlayScrollbar/OverlayScrollbar';
 import Spinner from 'components/Spinner';
 import { CARD_BODY_STYLE } from 'constants/card';
 import { LOCALSTORAGE } from 'constants/localStorage';
@@ -13,10 +14,11 @@ import EmptyLogsSearch from 'container/EmptyLogsSearch/EmptyLogsSearch';
 import LogsError from 'container/LogsError/LogsError';
 import { LogsLoading } from 'container/LogsLoading/LogsLoading';
 import { useOptionsMenu } from 'container/OptionsMenu';
+import { FontSize } from 'container/OptionsMenu/types';
 import { useActiveLog } from 'hooks/logs/useActiveLog';
 import { useCopyLogLink } from 'hooks/logs/useCopyLogLink';
 import { useQueryBuilder } from 'hooks/queryBuilder/useQueryBuilder';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 // interfaces
 import { ILog } from 'types/api/logs/log';
@@ -49,6 +51,7 @@ function LogsExplorerList({
 		activeLog,
 		onClearActiveLog,
 		onAddToQuery,
+		onGroupByAttribute,
 		onSetActiveLog,
 	} = useActiveLog();
 
@@ -78,6 +81,7 @@ function LogsExplorerList({
 						data={log}
 						linesPerRow={options.maxLines}
 						selectedFields={selectedFields}
+						fontSize={options.fontSize}
 					/>
 				);
 			}
@@ -90,6 +94,8 @@ function LogsExplorerList({
 					onAddToQuery={onAddToQuery}
 					onSetActiveLog={onSetActiveLog}
 					activeLog={activeLog}
+					fontSize={options.fontSize}
+					linesPerRow={options.maxLines}
 				/>
 			);
 		},
@@ -97,21 +103,12 @@ function LogsExplorerList({
 			activeLog,
 			onAddToQuery,
 			onSetActiveLog,
+			options.fontSize,
 			options.format,
 			options.maxLines,
 			selectedFields,
 		],
 	);
-
-	useEffect(() => {
-		if (!activeLogId || activeLogIndex < 0) return;
-
-		ref?.current?.scrollToIndex({
-			index: activeLogIndex,
-			align: 'start',
-			behavior: 'smooth',
-		});
-	}, [activeLogId, activeLogIndex]);
 
 	const renderContent = useMemo(() => {
 		const components = isLoading
@@ -129,29 +126,58 @@ function LogsExplorerList({
 						logs,
 						fields: selectedFields,
 						linesPerRow: options.maxLines,
+						fontSize: options.fontSize,
 						appendTo: 'end',
+						activeLogIndex,
 					}}
 					infitiyTableProps={{ onEndReached }}
 				/>
 			);
 		}
 
+		function getMarginTop(): string {
+			switch (options.fontSize) {
+				case FontSize.SMALL:
+					return '10px';
+				case FontSize.MEDIUM:
+					return '12px';
+				case FontSize.LARGE:
+					return '15px';
+				default:
+					return '15px';
+			}
+		}
+
 		return (
 			<Card
-				style={{ width: '100%', marginTop: '20px' }}
+				style={{ width: '100%', marginTop: getMarginTop() }}
 				bodyStyle={CARD_BODY_STYLE}
 			>
-				<Virtuoso
-					ref={ref}
-					data={logs}
-					endReached={onEndReached}
-					totalCount={logs.length}
-					itemContent={getItemContent}
-					components={components}
-				/>
+				<OverlayScrollbar isVirtuoso>
+					<Virtuoso
+						key={activeLogIndex || 'logs-virtuoso'}
+						ref={ref}
+						initialTopMostItemIndex={activeLogIndex !== -1 ? activeLogIndex : 0}
+						data={logs}
+						endReached={onEndReached}
+						totalCount={logs.length}
+						itemContent={getItemContent}
+						components={components}
+					/>
+				</OverlayScrollbar>
 			</Card>
 		);
-	}, [isLoading, options, logs, onEndReached, getItemContent, selectedFields]);
+	}, [
+		isLoading,
+		options.format,
+		options.maxLines,
+		options.fontSize,
+		activeLogIndex,
+		logs,
+		onEndReached,
+		getItemContent,
+		selectedFields,
+	]);
 
 	return (
 		<div className="logs-list-view-container">
@@ -167,7 +193,9 @@ function LogsExplorerList({
 				!isFetching &&
 				logs.length === 0 &&
 				!isError &&
-				isFilterApplied && <EmptyLogsSearch />}
+				isFilterApplied && (
+					<EmptyLogsSearch dataSource={DataSource.LOGS} panelType="LIST" />
+				)}
 
 			{isError && !isLoading && !isFetching && <LogsError />}
 
@@ -182,6 +210,7 @@ function LogsExplorerList({
 						log={activeLog}
 						onClose={onClearActiveLog}
 						onAddToQuery={onAddToQuery}
+						onGroupByAttribute={onGroupByAttribute}
 						onClickActionItem={onAddToQuery}
 					/>
 				</>

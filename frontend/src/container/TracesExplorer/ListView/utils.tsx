@@ -3,10 +3,33 @@ import { ColumnsType } from 'antd/es/table';
 import ROUTES from 'constants/routes';
 import { getMs } from 'container/Trace/Filters/Panel/PanelBody/Duration/util';
 import { formUrlParams } from 'container/TraceDetail/utils';
+import dayjs from 'dayjs';
 import { RowData } from 'lib/query/createTableColumnsFromQuery';
+import { Link } from 'react-router-dom';
 import { ILog } from 'types/api/logs/log';
 import { BaseAutocompleteData } from 'types/api/queryBuilder/queryAutocompleteResponse';
 import { QueryDataV3 } from 'types/api/widgets/getQuery';
+
+export function BlockLink({
+	children,
+	to,
+	openInNewTab,
+}: {
+	children: React.ReactNode;
+	to: string;
+	openInNewTab: boolean;
+}): any {
+	// Display block to make the whole cell clickable
+	return (
+		<Link
+			to={to}
+			style={{ display: 'block' }}
+			target={openInNewTab ? '_blank' : '_self'}
+		>
+			{children}
+		</Link>
+	);
+}
 
 export const transformDataWithDate = (
 	data: QueryDataV3[],
@@ -24,7 +47,25 @@ export const getTraceLink = (record: RowData): string =>
 export const getListColumns = (
 	selectedColumns: BaseAutocompleteData[],
 ): ColumnsType<RowData> => {
-	const initialColumns: ColumnsType<RowData> = [];
+	const initialColumns: ColumnsType<RowData> = [
+		{
+			dataIndex: 'date',
+			key: 'date',
+			title: 'Timestamp',
+			width: 145,
+			render: (value, item): JSX.Element => {
+				const date =
+					typeof value === 'string'
+						? dayjs(value).format('YYYY-MM-DD HH:mm:ss.SSS')
+						: dayjs(value / 1e6).format('YYYY-MM-DD HH:mm:ss.SSS');
+				return (
+					<BlockLink to={getTraceLink(item)} openInNewTab={false}>
+						<Typography.Text>{date}</Typography.Text>
+					</BlockLink>
+				);
+			},
+		},
+	];
 
 	const columns: ColumnsType<RowData> =
 		selectedColumns.map(({ dataType, key, type }) => ({
@@ -32,24 +73,38 @@ export const getListColumns = (
 			dataIndex: key,
 			key: `${key}-${dataType}-${type}`,
 			width: 145,
-			render: (value): JSX.Element => {
+			render: (value, item): JSX.Element => {
 				if (value === '') {
-					return <Typography data-testid={key}>N/A</Typography>;
+					return (
+						<BlockLink to={getTraceLink(item)} openInNewTab={false}>
+							<Typography data-testid={key}>N/A</Typography>
+						</BlockLink>
+					);
 				}
 
 				if (key === 'httpMethod' || key === 'responseStatusCode') {
 					return (
-						<Tag data-testid={key} color="magenta">
-							{value}
-						</Tag>
+						<BlockLink to={getTraceLink(item)} openInNewTab={false}>
+							<Tag data-testid={key} color="magenta">
+								{value}
+							</Tag>
+						</BlockLink>
 					);
 				}
 
 				if (key === 'durationNano') {
-					return <Typography data-testid={key}>{getMs(value)}ms</Typography>;
+					return (
+						<BlockLink to={getTraceLink(item)} openInNewTab={false}>
+							<Typography data-testid={key}>{getMs(value)}ms</Typography>
+						</BlockLink>
+					);
 				}
 
-				return <Typography data-testid={key}>{value}</Typography>;
+				return (
+					<BlockLink to={getTraceLink(item)} openInNewTab={false}>
+						<Typography data-testid={key}>{value}</Typography>
+					</BlockLink>
+				);
 			},
 			responsive: ['md'],
 		})) || [];
