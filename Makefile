@@ -22,7 +22,7 @@ GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOPATH ?= $(shell go env GOPATH)
 
-REPONAME ?= signoz
+REPONAME ?= coolboi567
 DOCKER_TAG ?= $(subst v,,$(BUILD_VERSION))
 FRONTEND_DOCKER_IMAGE ?= frontend
 QUERY_SERVICE_DOCKER_IMAGE ?= query-service
