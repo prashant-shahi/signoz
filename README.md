@@ -59,7 +59,7 @@ Read [more](https://signoz.io/distributed-tracing/).
 
 ### Metrics and Dashboards
 
-Ingest metrics from your infrastructure or applications and create customized dashboards to monitor them. Create visualization that suits your needs with a variety of panel types like pie chart, time-series, bar chart, etc.
+Ingest metrics from your infrastructure or applications and create customized dashboards to monitor them. Create visualization that suits your needs with a variety of panel types like pie charts, time-series, bar charts, etc.
 
 Create queries on your metrics data quickly with an easy-to-use metrics query builder. Add multiple queries and combine those queries with formulae to create really complex queries quickly.
 
