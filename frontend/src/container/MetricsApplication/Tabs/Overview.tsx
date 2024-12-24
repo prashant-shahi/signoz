@@ -8,7 +8,6 @@ import { PANEL_TYPES } from 'constants/queryBuilder';
 import ROUTES from 'constants/routes';
 import { routeConfig } from 'container/SideNav/config';
 import { getQueryString } from 'container/SideNav/helper';
-import useFeatureFlag from 'hooks/useFeatureFlag';
 import useResourceAttribute from 'hooks/useResourceAttribute';
 import {
 	convertRawQueriesToTraceSelectedTags,
@@ -19,6 +18,7 @@ import getStep from 'lib/getStep';
 import history from 'lib/history';
 import { OnClickPluginOpts } from 'lib/uPlotLib/plugins/onClickPlugin';
 import { defaultTo } from 'lodash-es';
+import { useAppContext } from 'providers/App/App';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from 'react-query';
 import { useDispatch, useSelector } from 'react-redux';
@@ -68,8 +68,10 @@ function Application(): JSX.Element {
 	const { queries } = useResourceAttribute();
 	const urlQuery = useUrlQuery();
 
-	const isSpanMetricEnabled = useFeatureFlag(FeatureKeys.USE_SPAN_METRICS)
-		?.active;
+	const { featureFlags } = useAppContext();
+	const isSpanMetricEnabled =
+		featureFlags?.find((flag) => flag.name === FeatureKeys.USE_SPAN_METRICS)
+			?.active || false;
 
 	const handleSetTimeStamp = useCallback((selectTime: number) => {
 		setSelectedTimeStamp(selectTime);
@@ -185,6 +187,7 @@ function Application(): JSX.Element {
 				panelTypes: PANEL_TYPES.TIME_SERIES,
 				yAxisUnit: '%',
 				id: SERVICE_CHART_ID.errorPercentage,
+				fillSpans: true,
 			}),
 		[servicename, tagFilterItems, topLevelOperationsRoute],
 	);
@@ -222,12 +225,11 @@ function Application(): JSX.Element {
 			apmToTraceQuery: Query,
 			isViewLogsClicked?: boolean,
 		): (() => void) => (): void => {
-			const currentTime = timestamp;
-			const endTime = timestamp + stepInterval;
-			console.log(endTime, stepInterval);
+			const endTime = timestamp;
+			const startTime = timestamp - stepInterval;
 
 			const urlParams = new URLSearchParams(search);
-			urlParams.set(QueryParams.startTime, currentTime.toString());
+			urlParams.set(QueryParams.startTime, startTime.toString());
 			urlParams.set(QueryParams.endTime, endTime.toString());
 			urlParams.delete(QueryParams.relativeTime);
 			const avialableParams = routeConfig[ROUTES.TRACE];

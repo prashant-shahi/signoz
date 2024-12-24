@@ -3,6 +3,7 @@
 import './CustomTimePicker.styles.scss';
 
 import { Input, Popover, Tooltip, Typography } from 'antd';
+import logEvent from 'api/common/logEvent';
 import cx from 'classnames';
 import { DateTimeRangeType } from 'container/TopNav/CustomDateTimeModal';
 import {
@@ -15,11 +16,14 @@ import { isValidTimeFormat } from 'lib/getMinMax';
 import { defaultTo, isFunction, noop } from 'lodash-es';
 import debounce from 'lodash-es/debounce';
 import { CheckCircle, ChevronDown, Clock } from 'lucide-react';
+import { useTimezone } from 'providers/Timezone';
 import {
 	ChangeEvent,
 	Dispatch,
 	SetStateAction,
+	useCallback,
 	useEffect,
+	useMemo,
 	useState,
 } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -28,6 +32,8 @@ import { popupContainer } from 'utils/selectPopupContainer';
 import CustomTimePickerPopoverContent from './CustomTimePickerPopoverContent';
 
 const maxAllowedMinTimeInMonths = 6;
+type ViewType = 'datetime' | 'timezone';
+const DEFAULT_VIEW: ViewType = 'datetime';
 
 interface CustomTimePickerProps {
 	onSelect: (value: string) => void;
@@ -81,11 +87,42 @@ function CustomTimePicker({
 	const location = useLocation();
 	const [isInputFocused, setIsInputFocused] = useState(false);
 
+	const [activeView, setActiveView] = useState<ViewType>(DEFAULT_VIEW);
+
+	const { timezone, browserTimezone } = useTimezone();
+	const activeTimezoneOffset = timezone.offset;
+	const isTimezoneOverridden = useMemo(
+		() => timezone.offset !== browserTimezone.offset,
+		[timezone, browserTimezone],
+	);
+
+	const handleViewChange = useCallback(
+		(newView: 'timezone' | 'datetime'): void => {
+			if (activeView !== newView) {
+				setActiveView(newView);
+			}
+			setOpen(true);
+		},
+		[activeView, setOpen],
+	);
+
+	const [isOpenedFromFooter, setIsOpenedFromFooter] = useState(false);
+
 	const getSelectedTimeRangeLabel = (
 		selectedTime: string,
 		selectedTimeValue: string,
 	): string => {
 		if (selectedTime === 'custom') {
+			// Convert the date range string to 12-hour format
+			const dates = selectedTimeValue.split(' - ');
+			if (dates.length === 2) {
+				const startDate = dayjs(dates[0], 'DD/MM/YYYY HH:mm');
+				const endDate = dayjs(dates[1], 'DD/MM/YYYY HH:mm');
+
+				return `${startDate.format('DD/MM/YYYY hh:mm A')} - ${endDate.format(
+					'DD/MM/YYYY hh:mm A',
+				)}`;
+			}
 			return selectedTimeValue;
 		}
 
@@ -131,6 +168,7 @@ function CustomTimePicker({
 		setOpen(newOpen);
 		if (!newOpen) {
 			setCustomDTPickerVisible?.(false);
+			setActiveView('datetime');
 		}
 	};
 
@@ -244,6 +282,7 @@ function CustomTimePicker({
 
 	const handleFocus = (): void => {
 		setIsInputFocused(true);
+		setActiveView('datetime');
 	};
 
 	const handleBlur = (): void => {
@@ -258,6 +297,18 @@ function CustomTimePicker({
 		setInputValue('');
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [location.pathname]);
+
+	const handleTimezoneHintClick = (e: React.MouseEvent): void => {
+		e.stopPropagation();
+		handleViewChange('timezone');
+		setIsOpenedFromFooter(false);
+		logEvent(
+			'DateTimePicker: Timezone picker opened from time range input badge',
+			{
+				page: location.pathname,
+			},
+		);
+	};
 
 	return (
 		<div className="custom-time-picker">
@@ -280,6 +331,10 @@ function CustomTimePicker({
 							handleGoLive={defaultTo(handleGoLive, noop)}
 							options={items}
 							selectedTime={selectedTime}
+							activeView={activeView}
+							setActiveView={setActiveView}
+							setIsOpenedFromFooter={setIsOpenedFromFooter}
+							isOpenedFromFooter={isOpenedFromFooter}
 						/>
 					) : (
 						content
@@ -316,12 +371,17 @@ function CustomTimePicker({
 						)
 					}
 					suffix={
-						<ChevronDown
-							size={14}
-							onClick={(): void => {
-								setOpen(!open);
-							}}
-						/>
+						<>
+							{!!isTimezoneOverridden && activeTimezoneOffset && (
+								<div className="timezone-badge" onClick={handleTimezoneHintClick}>
+									<span>{activeTimezoneOffset}</span>
+								</div>
+							)}
+							<ChevronDown
+								size={14}
+								onClick={(): void => handleViewChange('datetime')}
+							/>
+						</>
 					}
 				/>
 			</Popover>
