@@ -218,6 +218,7 @@ func NewReaderFromClickhouseConnection(
 			MaxBytesToRead:                      os.Getenv("ClickHouseMaxBytesToRead"),
 			OptimizeReadInOrderRegex:            os.Getenv("ClickHouseOptimizeReadInOrderRegex"),
 			OptimizeReadInOrderRegexCompiled:    regexCompiled,
+			MaxResultRowsForCHQuery:             constants.MaxResultRowsForCHQuery,
 		},
 	}
 
@@ -2640,7 +2641,7 @@ func (r *ClickHouseReader) GetLogsInfoInLastHeartBeatInterval(ctx context.Contex
 
 	var totalLogLines uint64
 
-	queryStr := fmt.Sprintf("select count() from %s.%s where timestamp > toUnixTimestamp(now()-toIntervalMinute(%d))*1000000000;", r.logsDB, r.logsTable, int(interval.Minutes()))
+	queryStr := fmt.Sprintf("select count() from %s.%s where timestamp > toUnixTimestamp(now()-toIntervalMinute(%d))*1000000000;", r.logsDB, r.logsTableV2, int(interval.Minutes()))
 
 	err := r.db.QueryRow(ctx, queryStr).Scan(&totalLogLines)
 
@@ -4198,9 +4199,26 @@ func (r *ClickHouseReader) GetListResultV3(ctx context.Context, query string) ([
 		var t time.Time
 		for idx, v := range vars {
 			if columnNames[idx] == "timestamp" {
-				t = time.Unix(0, int64(*v.(*uint64)))
+				switch v := v.(type) {
+				case *uint64:
+					t = time.Unix(0, int64(*v))
+				case *time.Time:
+					t = *v
+				}
 			} else if columnNames[idx] == "timestamp_datetime" {
 				t = *v.(*time.Time)
+			} else if columnNames[idx] == "events" {
+				var events []map[string]interface{}
+				eventsFromDB, ok := v.(*[]string)
+				if !ok {
+					continue
+				}
+				for _, event := range *eventsFromDB {
+					var eventMap map[string]interface{}
+					json.Unmarshal([]byte(event), &eventMap)
+					events = append(events, eventMap)
+				}
+				row[columnNames[idx]] = events
 			} else {
 				row[columnNames[idx]] = v
 			}

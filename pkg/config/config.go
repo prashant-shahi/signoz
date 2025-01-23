@@ -3,30 +3,34 @@ package config
 import (
 	"context"
 
-	signozconfmap "go.signoz.io/signoz/pkg/confmap"
-	"go.signoz.io/signoz/pkg/instrumentation"
-	"go.signoz.io/signoz/pkg/web"
+	"go.signoz.io/signoz/pkg/factory"
 )
 
-// This map contains the default values of all config structs
-var (
-	defaults = map[string]signozconfmap.Config{
-		"instrumentation": &instrumentation.Config{},
-		"web":             &web.Config{},
-	}
-)
-
-// Config defines the entire configuration of signoz.
-type Config struct {
-	Instrumentation instrumentation.Config `mapstructure:"instrumentation"`
-	Web             web.Config             `mapstructure:"web"`
-}
-
-func New(ctx context.Context, settings ProviderSettings) (*Config, error) {
-	provider, err := NewProvider(settings)
+func New(ctx context.Context, resolverConfig ResolverConfig, configFactories []factory.ConfigFactory) (*Conf, error) {
+	// Get the config from the resolver
+	resolver, err := NewResolver(resolverConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	return provider.Get(ctx)
+	resolvedConf, err := resolver.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	conf := NewConf()
+	// Set the default configs
+	for _, factory := range configFactories {
+		c := factory.New()
+		if err := conf.Set(factory.Name().String(), c); err != nil {
+			return nil, err
+		}
+	}
+
+	err = conf.Merge(resolvedConf)
+	if err != nil {
+		return nil, err
+	}
+
+	return conf, nil
 }
