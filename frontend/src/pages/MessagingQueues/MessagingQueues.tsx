@@ -8,11 +8,10 @@ import MessagingQueueHealthCheck from 'components/MessagingQueueHealthCheck/Mess
 import { QueryParams } from 'constants/query';
 import ROUTES from 'constants/routes';
 import DateTimeSelectionV2 from 'container/TopNav/DateTimeSelectionV2';
-import { ListMinus } from 'lucide-react';
+import { useGetTenantLicense } from 'hooks/useGetTenantLicense';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHistory } from 'react-router-dom';
-import { isCloudUser } from 'utils/app';
 
 import {
 	KAFKA_SETUP_DOC_LINK,
@@ -31,11 +30,11 @@ function MessagingQueues(): JSX.Element {
 		});
 
 		history.push(
-			`${ROUTES.MESSAGING_QUEUES_DETAIL}?${QueryParams.mqServiceView}=${callerView}`,
+			`${ROUTES.MESSAGING_QUEUES_KAFKA_DETAIL}?${QueryParams.mqServiceView}=${callerView}`,
 		);
 	};
 
-	const isCloudUserVal = isCloudUser();
+	const { isCloudUser: isCloudUserVal } = useGetTenantLicense();
 
 	const getStartedRedirect = (link: string, sourceCard: string): void => {
 		logEvent('Messaging Queues: Get started clicked', {
@@ -55,10 +54,6 @@ function MessagingQueues(): JSX.Element {
 
 	return (
 		<div className="messaging-queue-container">
-			<div className="messaging-breadcrumb">
-				<ListMinus size={16} />
-				{t('breadcrumb')}
-			</div>
 			<div className="messaging-header">
 				<div className="header-config">
 					{t('header')} /

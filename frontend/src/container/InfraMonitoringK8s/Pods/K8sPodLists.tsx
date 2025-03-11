@@ -41,6 +41,7 @@ import {
 	getK8sPodsListQuery,
 	IEntityColumn,
 	K8sPodsRowData,
+	usePageSize,
 } from '../utils';
 import PodDetails from './PodDetails/PodDetails';
 
@@ -136,7 +137,7 @@ function K8sPodsList({
 
 	const [selectedPodUID, setSelectedPodUID] = useState<string | null>(null);
 
-	const pageSize = 10;
+	const { pageSize, setPageSize } = usePageSize(K8sCategory.PODS);
 
 	const query = useMemo(() => {
 		const baseQuery = getK8sPodsListQuery();
@@ -156,7 +157,7 @@ function K8sPodsList({
 		}
 
 		return queryPayload;
-	}, [currentPage, minTime, maxTime, orderBy, groupBy, queryFilters]);
+	}, [pageSize, currentPage, queryFilters, minTime, maxTime, orderBy, groupBy]);
 
 	const { data, isFetching, isLoading, isError } = useGetK8sPodsList(
 		query as K8sPodsListPayload,
@@ -226,6 +227,11 @@ function K8sPodsList({
 	const podsData = useMemo(() => data?.payload?.data?.records || [], [data]);
 	const totalCount = data?.payload?.data?.total || 0;
 
+	const nestedPodsData = useMemo(() => {
+		if (!selectedRowData || !groupedByRowData?.payload?.data.records) return [];
+		return groupedByRowData?.payload?.data?.records || [];
+	}, [groupedByRowData, selectedRowData]);
+
 	const formattedPodsData = useMemo(
 		() => formatDataForTable(podsData, groupBy),
 		[podsData, groupBy],
@@ -242,6 +248,11 @@ function K8sPodsList({
 		groupBy,
 	]);
 
+	const numberOfPages = useMemo(() => Math.ceil(totalCount / pageSize), [
+		totalCount,
+		pageSize,
+	]);
+
 	const handleTableChange: TableProps<K8sPodsRowData>['onChange'] = useCallback(
 		(
 			pagination: TablePaginationConfig,
@@ -250,6 +261,11 @@ function K8sPodsList({
 		): void => {
 			if (pagination.current) {
 				setCurrentPage(pagination.current);
+				logEvent('Infra Monitoring: K8s pods list page number changed', {
+					page: pagination.current,
+					pageSize,
+					numberOfPages,
+				});
 			}
 
 			if ('field' in sorter && sorter.order) {
@@ -261,7 +277,7 @@ function K8sPodsList({
 				setOrderBy(null);
 			}
 		},
-		[],
+		[numberOfPages, pageSize],
 	);
 
 	const { handleChangeQueryData } = useQueryOperations({
@@ -275,9 +291,7 @@ function K8sPodsList({
 			handleChangeQueryData('filters', value);
 			setCurrentPage(1);
 
-			logEvent('Infra Monitoring: K8s list filters applied', {
-				filters: value,
-			});
+			logEvent('Infra Monitoring: K8s pods list filters applied', {});
 		},
 		[handleChangeQueryData],
 	);
@@ -302,18 +316,25 @@ function K8sPodsList({
 			setCurrentPage(1);
 			setGroupBy(groupBy);
 			setExpandedRowKeys([]);
+
+			logEvent('Infra Monitoring: K8s pods list group by changed', {});
 		},
 		[groupByFiltersData],
 	);
 
 	useEffect(() => {
-		logEvent('Infra Monitoring: K8s list page visited', {});
+		logEvent('Infra Monitoring: K8s pods list page visited', {});
 	}, []);
 
 	const selectedPodData = useMemo(() => {
 		if (!selectedPodUID) return null;
+		if (groupBy.length > 0) {
+			// If grouped by, return the pod from the formatted grouped by pods data
+			return nestedPodsData.find((pod) => pod.podUID === selectedPodUID) || null;
+		}
+		// If not grouped by, return the node from the nodes data
 		return podsData.find((pod) => pod.podUID === selectedPodUID) || null;
-	}, [selectedPodUID, podsData]);
+	}, [selectedPodUID, groupBy.length, podsData, nestedPodsData]);
 
 	const handleGroupByRowClick = (record: K8sPodsRowData): void => {
 		setSelectedRowData(record);
@@ -339,7 +360,7 @@ function K8sPodsList({
 			handleGroupByRowClick(record);
 		}
 
-		logEvent('Infra Monitoring: K8s list item clicked', {
+		logEvent('Infra Monitoring: K8s pods list item clicked', {
 			podUID: record.podUID,
 		});
 	};
@@ -424,6 +445,10 @@ function K8sPodsList({
 							spinning: isFetchingGroupedByRowData || isLoadingGroupedByRowData,
 							indicator: <Spin indicator={<LoadingOutlined size={14} spin />} />,
 						}}
+						onRow={(record): { onClick: () => void; className: string } => ({
+							onClick: (): void => setSelectedPodUID(record.podUID),
+							className: 'expanded-clickable-row',
+						})}
 					/>
 
 					{groupedByRowData?.payload?.data?.total &&
@@ -484,6 +509,16 @@ function K8sPodsList({
 		);
 	};
 
+	const onPaginationChange = (page: number, pageSize: number): void => {
+		setCurrentPage(page);
+		setPageSize(pageSize);
+		logEvent('Infra Monitoring: K8s pods list page number changed', {
+			page,
+			pageSize,
+			numberOfPages,
+		});
+	};
+
 	return (
 		<div className="k8s-list">
 			<K8sHeader
@@ -513,8 +548,9 @@ function K8sPodsList({
 					current: currentPage,
 					pageSize,
 					total: totalCount,
-					showSizeChanger: false,
-					hideOnSinglePage: true,
+					showSizeChanger: true,
+					hideOnSinglePage: false,
+					onChange: onPaginationChange,
 				}}
 				loading={{
 					spinning: isFetching || isLoading,

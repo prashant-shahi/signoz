@@ -50,7 +50,21 @@ type GetTopOperationsParams struct {
 	Limit       int             `json:"limit"`
 }
 
+type EventType string
+
+const (
+	TrackEvent    EventType = "track"
+	IdentifyEvent EventType = "identify"
+	GroupEvent    EventType = "group"
+)
+
+// IsValid checks if the EventType is one of the valid values
+func (e EventType) IsValid() bool {
+	return e == TrackEvent || e == IdentifyEvent || e == GroupEvent
+}
+
 type RegisterEventParams struct {
+	EventType   EventType              `json:"eventType"`
 	EventName   string                 `json:"eventName"`
 	Attributes  map[string]interface{} `json:"attributes"`
 	RateLimited bool                   `json:"rateLimited"`
@@ -313,6 +327,16 @@ type SearchTracesParams struct {
 	SpanID           string `json:"spanId"`
 	SpansRenderLimit int    `json:"spansRenderLimit"`
 	MaxSpansInTrace  int    `json:"maxSpansInTrace"`
+}
+
+type GetWaterfallSpansForTraceWithMetadataParams struct {
+	SelectedSpanID              string   `json:"selectedSpanId"`
+	IsSelectedSpanIDUnCollapsed bool     `json:"isSelectedSpanIDUnCollapsed"`
+	UncollapsedSpans            []string `json:"uncollapsedSpans"`
+}
+
+type GetFlamegraphSpansForTraceParams struct {
+	SelectedSpanID string `json:"selectedSpanId"`
 }
 
 type SpanFilterParams struct {

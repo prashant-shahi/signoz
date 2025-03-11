@@ -26,6 +26,7 @@ import createDashboard from 'api/dashboard/create';
 import { AxiosError } from 'axios';
 import cx from 'classnames';
 import { ENTITY_VERSION_V4 } from 'constants/app';
+import { DATE_TIME_FORMATS } from 'constants/dateTimeFormats';
 import ROUTES from 'constants/routes';
 import { sanitizeDashboardData } from 'container/NewDashboard/DashboardDescription';
 import { downloadObjectAsJson } from 'container/NewDashboard/DashboardDescription/utils';
@@ -33,8 +34,9 @@ import { Base64Icons } from 'container/NewDashboard/DashboardSettings/General/ut
 import dayjs from 'dayjs';
 import { useGetAllDashboard } from 'hooks/dashboard/useGetAllDashboard';
 import useComponentPermission from 'hooks/useComponentPermission';
+import { useGetTenantLicense } from 'hooks/useGetTenantLicense';
 import { useNotifications } from 'hooks/useNotifications';
-import history from 'lib/history';
+import { useSafeNavigate } from 'hooks/useSafeNavigate';
 import { get, isEmpty, isUndefined } from 'lodash-es';
 import {
 	ArrowDownWideNarrow,
@@ -73,7 +75,7 @@ import {
 } from 'react';
 import { Layout } from 'react-grid-layout';
 import { useTranslation } from 'react-i18next';
-import { generatePath, Link } from 'react-router-dom';
+import { generatePath } from 'react-router-dom';
 import { useCopyToClipboard } from 'react-use';
 import {
 	Dashboard,
@@ -81,7 +83,6 @@ import {
 	WidgetRow,
 	Widgets,
 } from 'types/api/dashboard/getAll';
-import { isCloudUser } from 'utils/app';
 
 import DashboardTemplatesModal from './DashboardTemplates/DashboardTemplatesModal';
 import ImportJSON from './ImportJSON';
@@ -104,11 +105,13 @@ function DashboardsList(): JSX.Element {
 	} = useGetAllDashboard();
 
 	const { user } = useAppContext();
-
+	const { safeNavigate } = useSafeNavigate();
 	const {
 		listSortOrder: sortOrder,
 		setListSortOrder: setSortOrder,
 	} = useDashboard();
+
+	const { isCloudUser: isCloudUserVal } = useGetTenantLicense();
 
 	const [searchString, setSearchString] = useState<string>(
 		sortOrder.search || '',
@@ -292,7 +295,7 @@ function DashboardsList(): JSX.Element {
 			});
 
 			if (response.statusCode === 200) {
-				history.push(
+				safeNavigate(
 					generatePath(ROUTES.DASHBOARD, {
 						dashboardId: response.payload.uuid,
 					}),
@@ -312,7 +315,7 @@ function DashboardsList(): JSX.Element {
 				errorMessage: (error as AxiosError).toString() || 'Something went Wrong',
 			});
 		}
-	}, [newDashboardState, t]);
+	}, [newDashboardState, safeNavigate, t]);
 
 	const onModalHandler = (uploadedGrafana: boolean): void => {
 		logEvent('Dashboard List: Import JSON clicked', {});
@@ -361,7 +364,7 @@ function DashboardsList(): JSX.Element {
 	function getFormattedTime(dashboard: Dashboard, option: string): string {
 		return formatTimezoneAdjustedTimestamp(
 			get(dashboard, option, ''),
-			'MMM D, YYYY ⎯ hh:mm:ss A (UTC Z)',
+			DATE_TIME_FORMATS.DASH_DATETIME_UTC,
 		);
 	}
 
@@ -407,7 +410,7 @@ function DashboardsList(): JSX.Element {
 			render: (dashboard: Data, _, index): JSX.Element => {
 				const formattedDateAndTime = formatTimezoneAdjustedTimestamp(
 					dashboard.createdAt,
-					'MMM D, YYYY ⎯ hh:mm:ss A (UTC Z)',
+					DATE_TIME_FORMATS.DASH_DATETIME_UTC,
 				);
 
 				const getLink = (): string => `${ROUTES.ALL_DASHBOARD}/${dashboard.id}`;
@@ -417,7 +420,7 @@ function DashboardsList(): JSX.Element {
 					if (event.metaKey || event.ctrlKey) {
 						window.open(getLink(), '_blank');
 					} else {
-						history.push(getLink());
+						safeNavigate(getLink());
 					}
 					logEvent('Dashboard List: Clicked on dashboard', {
 						dashboardId: dashboard.id,
@@ -443,10 +446,12 @@ function DashboardsList(): JSX.Element {
 									placement="left"
 									overlayClassName="title-toolip"
 								>
-									<Link
-										to={getLink()}
+									<div
 										className="title-link"
-										onClick={(e): void => e.stopPropagation()}
+										onClick={(e): void => {
+											e.stopPropagation();
+											safeNavigate(getLink());
+										}}
 									>
 										<img
 											src={dashboard?.image || Base64Icons[0]}
@@ -459,7 +464,7 @@ function DashboardsList(): JSX.Element {
 										>
 											{dashboard.name}
 										</Typography.Text>
-									</Link>
+									</div>
 								</Tooltip>
 							</div>
 
@@ -691,7 +696,7 @@ function DashboardsList(): JSX.Element {
 							Create and manage dashboards for your workspace.
 						</Typography.Text>
 					</Flex>
-					{isCloudUser() && (
+					{isCloudUserVal && (
 						<div className="integrations-container">
 							<div className="integrations-content">
 								<RequestDashboardBtn />
@@ -732,7 +737,7 @@ function DashboardsList(): JSX.Element {
 							<Button
 								type="text"
 								className="learn-more"
-								onClick={(): void => handleContactSupport(isCloudUser())}
+								onClick={(): void => handleContactSupport(isCloudUserVal)}
 							>
 								Contact Support
 							</Button>

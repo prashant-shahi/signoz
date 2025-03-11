@@ -7,7 +7,10 @@ import {
 	BaseAutocompleteData,
 	DataTypes,
 } from 'types/api/queryBuilder/queryAutocompleteResponse';
-import { IBuilderQuery } from 'types/api/queryBuilder/queryBuilderData';
+import {
+	IBuilderQuery,
+	TagFilterItem,
+} from 'types/api/queryBuilder/queryBuilderData';
 import { EQueryType } from 'types/common/dashboard';
 import { DataSource } from 'types/common/queryBuilder';
 import { nanoToMilli } from 'utils/timeUtils';
@@ -23,6 +26,9 @@ export const QUERY_KEYS = {
 	K8S_CLUSTER_NAME: 'k8s.cluster.name',
 	K8S_NODE_NAME: 'k8s.node.name',
 	K8S_DEPLOYMENT_NAME: 'k8s.deployment.name',
+	K8S_STATEFUL_SET_NAME: 'k8s.statefulset.name',
+	K8S_JOB_NAME: 'k8s.job.name',
+	K8S_DAEMON_SET_NAME: 'k8s.daemonset.name',
 };
 
 /**
@@ -298,3 +304,12 @@ export const getEntityTracesQueryPayload = (
 		],
 	},
 });
+
+export const filterOutPrimaryFilters = (
+	filters: TagFilterItem[],
+	primaryKeys: string[],
+): TagFilterItem[] =>
+	filters.filter(
+		(filter) =>
+			!primaryKeys.includes(filter.key?.key ?? '') && filter.key?.key !== 'id',
+	);

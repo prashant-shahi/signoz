@@ -33,6 +33,7 @@ import {
 } from '../constants';
 import K8sHeader from '../K8sHeader';
 import LoadingContainer from '../LoadingContainer';
+import { usePageSize } from '../utils';
 import DeploymentDetails from './DeploymentDetails';
 import {
 	defaultAddedColumns,
@@ -69,7 +70,7 @@ function K8sDeploymentsList({
 		string | null
 	>(null);
 
-	const pageSize = 10;
+	const { pageSize, setPageSize } = usePageSize(K8sCategory.DEPLOYMENTS);
 
 	const [groupBy, setGroupBy] = useState<IBuilderQuery['groupBy']>([]);
 
@@ -193,7 +194,7 @@ function K8sDeploymentsList({
 			queryPayload.groupBy = groupBy;
 		}
 		return queryPayload;
-	}, [currentPage, minTime, maxTime, orderBy, groupBy, queryFilters]);
+	}, [pageSize, currentPage, queryFilters, minTime, maxTime, orderBy, groupBy]);
 
 	const formattedGroupedByDeploymentsData = useMemo(
 		() =>
@@ -219,6 +220,11 @@ function K8sDeploymentsList({
 		[deploymentsData, groupBy],
 	);
 
+	const nestedDeploymentsData = useMemo(() => {
+		if (!selectedRowData || !groupedByRowData?.payload?.data.records) return [];
+		return groupedByRowData?.payload?.data?.records || [];
+	}, [groupedByRowData, selectedRowData]);
+
 	const columns = useMemo(() => getK8sDeploymentsListColumns(groupBy), [
 		groupBy,
 	]);
@@ -239,6 +245,11 @@ function K8sDeploymentsList({
 		}
 	}, [selectedRowData, fetchGroupedByRowData]);
 
+	const numberOfPages = useMemo(() => Math.ceil(totalCount / pageSize), [
+		totalCount,
+		pageSize,
+	]);
+
 	const handleTableChange: TableProps<K8sDeploymentsRowData>['onChange'] = useCallback(
 		(
 			pagination: TablePaginationConfig,
@@ -249,6 +260,11 @@ function K8sDeploymentsList({
 		): void => {
 			if (pagination.current) {
 				setCurrentPage(pagination.current);
+				logEvent('Infra Monitoring: K8s deployments list page number changed', {
+					page: pagination.current,
+					pageSize,
+					numberOfPages,
+				});
 			}
 
 			if ('field' in sorter && sorter.order) {
@@ -260,7 +276,7 @@ function K8sDeploymentsList({
 				setOrderBy(null);
 			}
 		},
-		[],
+		[numberOfPages, pageSize],
 	);
 
 	const { handleChangeQueryData } = useQueryOperations({
@@ -274,25 +290,37 @@ function K8sDeploymentsList({
 			handleChangeQueryData('filters', value);
 			setCurrentPage(1);
 
-			logEvent('Infra Monitoring: K8s list filters applied', {
-				filters: value,
-			});
+			logEvent('Infra Monitoring: K8s deployments list filters applied', {});
 		},
 		[handleChangeQueryData],
 	);
 
 	useEffect(() => {
-		logEvent('Infra Monitoring: K8s list page visited', {});
+		logEvent('Infra Monitoring: K8s deployments list page visited', {});
 	}, []);
 
 	const selectedDeploymentData = useMemo(() => {
 		if (!selectedDeploymentUID) return null;
+		if (groupBy.length > 0) {
+			// If grouped by, return the deployment from the formatted grouped by deployments data
+			return (
+				nestedDeploymentsData.find(
+					(deployment) => deployment.deploymentName === selectedDeploymentUID,
+				) || null
+			);
+		}
+		// If not grouped by, return the deployment from the deployments data
 		return (
 			deploymentsData.find(
 				(deployment) => deployment.deploymentName === selectedDeploymentUID,
 			) || null
 		);
-	}, [selectedDeploymentUID, deploymentsData]);
+	}, [
+		selectedDeploymentUID,
+		groupBy.length,
+		deploymentsData,
+		nestedDeploymentsData,
+	]);
 
 	const handleRowClick = (record: K8sDeploymentsRowData): void => {
 		if (groupBy.length === 0) {
@@ -345,6 +373,10 @@ function K8sDeploymentsList({
 							indicator: <Spin indicator={<LoadingOutlined size={14} spin />} />,
 						}}
 						showHeader={false}
+						onRow={(record): { onClick: () => void; className: string } => ({
+							onClick: (): void => setselectedDeploymentUID(record.deploymentUID),
+							className: 'expanded-clickable-row',
+						})}
 					/>
 
 					{groupedByRowData?.payload?.data?.total &&
@@ -428,6 +460,8 @@ function K8sDeploymentsList({
 			setCurrentPage(1);
 			setGroupBy(groupBy);
 			setExpandedRowKeys([]);
+
+			logEvent('Infra Monitoring: K8s deployments list group by changed', {});
 		},
 		[groupByFiltersData],
 	);
@@ -442,6 +476,16 @@ function K8sDeploymentsList({
 			);
 		}
 	}, [groupByFiltersData]);
+
+	const onPaginationChange = (page: number, pageSize: number): void => {
+		setCurrentPage(page);
+		setPageSize(pageSize);
+		logEvent('Infra Monitoring: K8s deployments list page number changed', {
+			page,
+			pageSize,
+			numberOfPages,
+		});
+	};
 
 	return (
 		<div className="k8s-list">
@@ -468,8 +512,9 @@ function K8sDeploymentsList({
 					current: currentPage,
 					pageSize,
 					total: totalCount,
-					showSizeChanger: false,
-					hideOnSinglePage: true,
+					showSizeChanger: true,
+					hideOnSinglePage: false,
+					onChange: onPaginationChange,
 				}}
 				scroll={{ x: true }}
 				loading={{
