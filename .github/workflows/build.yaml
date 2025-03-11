@@ -27,7 +27,7 @@ jobs:
       - name: Setup golang
         uses: actions/setup-go@v4
         with:
-          go-version: "1.21"
+          go-version: "1.22"
       - name: Build query-service image
         shell: bash
         run: |
@@ -41,7 +41,7 @@ jobs:
       - name: Setup golang
         uses: actions/setup-go@v4
         with:
-          go-version: "1.21"
+          go-version: "1.22"
       - name: Build EE query-service image
         shell: bash
         run: |

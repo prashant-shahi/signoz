@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+version: 2
+
+project_name: signoz-community
+
+before:
+  hooks:
+    - go mod tidy
+    - cp ../../LICENSE .
+    - cp ../../README.md .
+
+after:
+  hooks:
+    - rm LICENSE
+    - rm README.md
+
+builds:
+  - env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if eq .Os "linux" }}
+          {{- if eq .Arch "amd64" }}CC=x86_64-linux-musl-gcc{{- end }}
+          {{- if eq .Arch "arm64" }}CC=aarch64-linux-gnu-gcc{{- end }}
+        {{- end }}
+        {{- if eq .Os "darwin" }}
+          {{- if eq .Arch "amd64"}}CC=o64-clang{{- end }}
+          {{- if eq .Arch "arm64"}}CC=oa64-clang{{- end }}
+        {{- end }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{- .Os }}_{{- .Arch }}
+    files:
+      - README.md
+      - LICENSE
+
+dockers:
+  - image_templates:
+      - coolboi567/signoz:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--platform={{.Os}}/{{.Arch}}"
+    goarch: "{{ .Arch }}"
+    goos: "{{ .Os }}"
+
+docker_manifests:
+  - name_template: "coolboi567/signoz-community:v{{ .Tag }}"
+    image_templates:
+      - "coolboi567/signoz-community:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+
+release:
+  name_template: "v{{ .Version }}"
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

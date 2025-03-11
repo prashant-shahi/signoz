@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+version: 2
+
+project_name: signoz
+
+before:
+  hooks:
+    - go mod tidy
+    - cp ../../LICENSE .
+    - cp ../../README.md .
+
+after:
+  hooks:
+    - rm LICENSE
+    - rm README.md
+
+builds:
+  - env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if eq .Os "darwin" }}
+          {{- if eq .Arch "amd64"}}CC=o64-clang{{- end }}
+          {{- if eq .Arch "arm64"}}CC=aarch64-apple-darwin20.2-clang{{- end }}
+        {{- end }}
+        {{- if eq .Os "windows" }}
+          {{- if eq .Arch "amd64" }}CC=x86_64-w64-mingw32-gcc{{- end }}
+          {{- if eq .Arch "amd64" }}GOFLAGS=-ldflags=-w -buildmode=exe{{- end }}
+        {{- end }}
+        {{- if eq .Os "linux" }}
+          {{- if eq .Arch "arm64" }}CC=aarch64-linux-gnu-gcc{{- end }}
+        {{- end }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X github.com/SigNoz/signoz/pkg/query-service/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser -X go.signoz.io/signoz/pkg/query-service/version.buildVersion={{.Version}} -X go.signoz.io/signoz/pkg/query-service/version.buildHash={{.ShortCommit}} -X go.signoz.io/signoz/pkg/query-service/version.buildTime={{.Date}} -X go.signoz.io/signoz/pkg/query-service/version.gitBranch={{.Branch}} -X go.signoz.io/signoz/ee/query-service/constants.ZeusURL=https://api.signoz.cloud
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    tags:
+      - timetzdata
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{- .Os }}_{{- .Arch }}
+    files:
+      - README.md
+      - LICENSE
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
