@@ -68,10 +68,13 @@ dockers:
       - "--label=org.opencontainers.image.source={{ .GitURL }}"
       - "--platform=linux/amd64"
     use: buildx
-    extra_files:
-      - config/prometheus.yml
-      - templates
-      - frontend-build
+    templated_files:
+      - src: config/prometheus.yml
+        dst: prometheus.yml
+      - src: templates
+        dst: templates
+      - src: frontend-build
+        dst: frontend-build
   - dockerfile: Dockerfile.goreleaser
     image_templates:
       - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
@@ -85,10 +88,13 @@ dockers:
       - "--label=org.opencontainers.image.source={{ .GitURL }}"
       - "--platform=linux/arm64"
     use: buildx
-    extra_files:
-      - config/prometheus.yml
-      - templates
-      - frontend-build
+    templated_files:
+      - src: config/prometheus.yml
+        dst: prometheus.yml
+      - src: templates
+        dst: templates
+      - src: frontend-build
+        dst: frontend-build
 
 docker_manifests:
   - name_template: coolboi567/{{ .ProjectName }}:v{{ .Version }}
