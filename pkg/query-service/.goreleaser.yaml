@@ -8,7 +8,7 @@ before:
   hooks:
     - go mod tidy
     - cp ../../LICENSE ./PROJECT_LICENSE
-    - sh -c 'cd ../.. && make build-frontend-static && cp -r frontend/build ../ee/query-service/frontend-build'
+    - sh -c 'cd ../.. && make build-frontend-static && mv frontend/build pkg/query-service/frontend-build'
     - cp ../../README.md ./PROJECT_README.md
 
 after:
