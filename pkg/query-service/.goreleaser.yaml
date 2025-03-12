@@ -15,7 +15,6 @@ after:
   hooks:
     - rm PROJECT_LICENSE
     - rm PROJECT_README.md
-    - rm -rf frontend-build
     - mkdir -p bin
     - >-
       cp "dist/{{ .Runtime.Goos }}/{{ .ProjectName }}_{{ .Runtime.Goos }}_{{ .Runtime.Goarch }}{{ if eq .Runtime.Goarch "amd64" }}_v1{{ else if eq .Runtime.Goarch "arm64" }}_v8.0{{ end }}/{{ .ProjectName }}" ./bin/signoz-{{ .Runtime.Goos }}-{{ .Runtime.Goarch }}
@@ -59,7 +58,8 @@ archives:
         dst: signoz-web
 
 dockers:
-  - image_templates:
+  - dockerfile: Dockerfile.goreleaser
+    image_templates:
       - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
     build_flag_templates:
       - "--pull"
@@ -71,7 +71,8 @@ dockers:
       - "--label=org.opencontainers.image.source={{ .GitURL }}"
       - "--platform=linux/amd64"
     use: buildx
-  - image_templates:
+  - dockerfile: Dockerfile.goreleaser
+    image_templates:
       - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
     build_flag_templates:
       - "--pull"
