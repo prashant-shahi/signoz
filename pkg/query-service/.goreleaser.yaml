@@ -60,18 +60,39 @@ archives:
 
 dockers:
   - image_templates:
-      - coolboi567/signoz-community:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}
-    use: buildx
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
     build_flag_templates:
       - "--pull"
-      - "--platform={{.Os}}/{{.Arch}}"
-    goarch: "{{ .Arch }}"
-    goos: "{{ .Os }}"
+      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--platform=linux/amd64"
+    use: buildx
+  - image_templates:
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--platform=linux/arm64"
+    use: buildx
 
 docker_manifests:
-  - name_template: "coolboi567/signoz-community:v{{ .Tag }}"
+  - name_template: coolboi567/{{ .ProjectName }}:v{{ .Version }}
     image_templates:
-      - "coolboi567/signoz-community:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
+  - name_template: coolboi567/{{ .ProjectName }}:latest
+    image_templates:
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
 
 release:
   name_template: "v{{ .Version }}"

@@ -38,7 +38,7 @@ builds:
     goarm64:
       - v8.0
     ldflags:
-      - -s -w -X github.com/SigNoz/signoz/pkg/query-service/version.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.CommitDate}} -X main.builtBy=goreleaser -X go.signoz.io/signoz/pkg/query-service/version.buildVersion={{.Version}} -X go.signoz.io/signoz/pkg/query-service/version.buildHash={{.ShortCommit}} -X go.signoz.io/signoz/pkg/query-service/version.buildTime={{.Date}} -X go.signoz.io/signoz/pkg/query-service/version.gitBranch={{.Branch}} -X go.signoz.io/signoz/ee/query-service/constants.ZeusURL=https://api.signoz.cloud
+      - -s -w -X github.com/SigNoz/signoz/pkg/query-service/version.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser -X go.signoz.io/signoz/pkg/query-service/version.buildVersion={{ .Version }} -X go.signoz.io/signoz/pkg/query-service/version.buildHash={{ .ShortCommit }} -X go.signoz.io/signoz/pkg/query-service/version.buildTime={{ .Date }} -X go.signoz.io/signoz/pkg/query-service/version.gitBranch={{ .Branch }} -X go.signoz.io/signoz/ee/query-service/constants.ZeusURL=https://api.signoz.cloud
       - >-
         {{- if eq .Os "linux" }}-linkmode external -extldflags '-static'{{- end }}
     mod_timestamp: "{{ .CommitTimestamp }}"
@@ -60,18 +60,39 @@ archives:
 
 dockers:
   - image_templates:
-      - coolboi567/signoz:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}
-    use: buildx
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
     build_flag_templates:
       - "--pull"
-      - "--platform={{.Os}}/{{.Arch}}"
-    goarch: "{{ .Arch }}"
-    goos: "{{ .Os }}"
+      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--platform=linux/amd64"
+    use: buildx
+  - image_templates:
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+      - "--platform=linux/arm64"
+    use: buildx
 
 docker_manifests:
-  - name_template: "coolboi567/signoz:v{{ .Tag }}"
+  - name_template: coolboi567/{{ .ProjectName }}:v{{ .Version }}
     image_templates:
-      - "coolboi567/signoz:v{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
+  - name_template: coolboi567/{{ .ProjectName }}:latest
+    image_templates:
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
+      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
 
 release:
   name_template: "v{{ .Version }}"
