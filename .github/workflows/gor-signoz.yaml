@@ -40,6 +40,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+      - name: cross-compilation-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - name: get-sha
         shell: bash
         run: |
