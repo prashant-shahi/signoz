@@ -14,10 +14,10 @@ RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
 WORKDIR /root
 
 # copy the signoz binary
-COPY bin/signoz-${TARGETOS}-${TARGETARCH} /root/signoz
+COPY signoz-community_${TARGETOS}_${TARGETARCH} /root/signoz
 
 # copy prometheus YAML config
-COPY config/prometheus.yml /root/config/prometheus.yml
+COPY prometheus.yml /root/config/prometheus.yml
 COPY templates /root/templates
 
 # Make signoz executable for non-root users

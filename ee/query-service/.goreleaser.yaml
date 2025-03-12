@@ -15,11 +15,6 @@ after:
   hooks:
     - rm PROJECT_LICENSE
     - rm PROJECT_README.md
-    - cp ../../pkg/query-service/config/prometheus.yml ./prometheus.yml
-    - cp -r ../../pkg/query-service/templates ./templates
-    - mkdir -p bin
-    - >-
-      cp "dist/{{ .Runtime.Goos }}/{{ .ProjectName }}_{{ .Runtime.Goos }}_{{ .Runtime.Goarch }}{{ if eq .Runtime.Goarch "amd64" }}_v1{{ else if eq .Runtime.Goarch "arm64" }}_v8.0{{ end }}/{{ .ProjectName }}" ./bin/signoz-{{ .Runtime.Goos }}-{{ .Runtime.Goarch }}
 
 builds:
   - env:
@@ -73,6 +68,10 @@ dockers:
       - "--label=org.opencontainers.image.source={{ .GitURL }}"
       - "--platform=linux/amd64"
     use: buildx
+    extra_files:
+      - ../../pkg/query-service/config/prometheus.yml
+      - ../../pkg/query-service/templates
+      - ../../frontend-build
   - dockerfile: Dockerfile.goreleaser
     image_templates:
       - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
@@ -86,6 +85,10 @@ dockers:
       - "--label=org.opencontainers.image.source={{ .GitURL }}"
       - "--platform=linux/arm64"
     use: buildx
+    extra_files:
+      - ../../pkg/query-service/config/prometheus.yml
+      - ../../pkg/query-service/templates
+      - ../../frontend-build
 
 docker_manifests:
   - name_template: coolboi567/{{ .ProjectName }}:v{{ .Version }}

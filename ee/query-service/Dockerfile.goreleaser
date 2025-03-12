@@ -14,7 +14,7 @@ RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
 WORKDIR /root
 
 # copy the signoz binary
-COPY bin/signoz-${TARGETOS}-${TARGETARCH} /root/signoz
+COPY signoz_${TARGETOS}_${TARGETARCH} /root/signoz
 
 # copy prometheus YAML config
 COPY prometheus.yml /root/config/prometheus.yml
