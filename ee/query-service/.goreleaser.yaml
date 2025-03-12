@@ -16,7 +16,8 @@ after:
     - rm PROJECT_LICENSE
     - rm PROJECT_README.md
     - rm -rf frontend-build
-    - cp dist/{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}_{{ .Goamd64}}{{ .Goarm64 }}/signoz ee/query-service/bin/signoz-{{ .Os }}-{{ .Arch }}
+    - >-
+      cp "dist/{{ .ProjectName }}_{{ .Runtime.Goos }}_{{ .Runtime.Goarch }}{{ if eq .Runtime.Goarch "amd64" }}_v1{{ else if eq .Runtime.Goarch "arm64" }}_v8.0{{ end }}/{{ .ProjectName }}" ./ee/query-service/bin/signoz-{{ .Runtime.Goos }}-{{ .Runtime.Goarch }}
 
 builds:
   - env:
