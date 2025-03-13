@@ -155,9 +155,7 @@ test:
 
 goreleaser-snapshot:
 	@if [[ ${GORELEASER_WORKDIR} ]]; then \
-		cd ${GORELEASER_WORKDIR} && \
-		${GORELEASER_BIN} release --clean --snapshot; \
-		cd -; \
+		${GORELEASER_BIN} release --config ${GORELEASER_WORKDIR}/.goreleaser.yaml --clean --snapshot; \
 	else \
 		${GORELEASER_BIN} release --clean --snapshot; \
 	fi
@@ -165,8 +163,10 @@ goreleaser-snapshot:
 goreleaser-snapshot-histogram-quantile:
 	make GORELEASER_WORKDIR=$(CH_HISTOGRAM_QUANTILE_DIRECTORY) goreleaser-snapshot
 
-goreleaser-snapshot-signoz: build-frontend-static
+# goreleaser-snapshot-signoz: build-frontend-static
+goreleaser-snapshot-signoz:
 	make GORELEASER_WORKDIR=$(EE_QUERY_SERVICE_DIRECTORY) goreleaser-snapshot
 
-goreleaser-snapshot-signoz-community: build-frontend-static
+# goreleaser-snapshot-signoz-community: build-frontend-static
+goreleaser-snapshot-signoz-community:
 	make GORELEASER_WORKDIR=$(QUERY_SERVICE_DIRECTORY) goreleaser-snapshot

@@ -1,4 +1,4 @@
-name: gor-signoz
+name: gor-signoz-community
 
 on:
   push:
@@ -20,20 +20,6 @@ jobs:
         shell: bash
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: dotenv-frontend
-        working-directory: frontend
-        run: |
-          echo 'INTERCOM_APP_ID="${{ secrets.INTERCOM_APP_ID }}"' > .env
-          echo 'SEGMENT_ID="${{ secrets.SEGMENT_ID }}"' >> .env
-          echo 'SENTRY_AUTH_TOKEN="${{ secrets.SENTRY_AUTH_TOKEN }}"' >> .env
-          echo 'SENTRY_ORG="${{ secrets.SENTRY_ORG }}"' >> .env
-          echo 'SENTRY_PROJECT_ID="${{ secrets.SENTRY_PROJECT_ID }}"' >> .env
-          echo 'SENTRY_DSN="${{ secrets.SENTRY_DSN }}"' >> .env
-          echo 'TUNNEL_URL="${{ secrets.TUNNEL_URL }}"' >> .env
-          echo 'TUNNEL_DOMAIN="${{ secrets.TUNNEL_DOMAIN }}"' >> .env
-          echo 'POSTHOG_KEY="${{ secrets.POSTHOG_KEY }}"' >> .env
-          echo 'CUSTOMERIO_ID="${{ secrets.CUSTOMERIO_ID }}"' >> .env
-          echo 'CUSTOMERIO_SITE_ID="${{ secrets.CUSTOMERIO_SITE_ID }}"' >> .env
       - name: build-frontend
         run: make build-frontend-static
       - name: upload-frontend-artifact
@@ -49,7 +35,7 @@ jobs:
           - ubuntu-latest
           - macos-latest
     env:
-      WORKDIR: ee/query-service
+      WORKDIR: pkg/query-service
     runs-on: ${{ matrix.os }}
     steps:
       - name: checkout
@@ -118,7 +104,7 @@ jobs:
     needs: build
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
-      WORKDIR: ee/query-service
+      WORKDIR: pkg/query-service
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -174,4 +160,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-
