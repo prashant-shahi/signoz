@@ -10,11 +10,12 @@ monorepo:
 before:
   hooks:
     - go mod tidy
-    - cp ../../../LICENSE .
-    - cp ../../../README.md .
 
 builds:
-  - env:
+  - id: signoz
+    binary: bin/histogram-quantile
+    main: scripts/clickhouse/histogramquantile/main.go
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -37,8 +38,4 @@ archives:
       - LICENSE
 
 release:
-  footer: >-
-
-    ---
-
-    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+  name_template: "histogram-quantile/v{{ .Version }}"

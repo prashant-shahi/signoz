@@ -2,7 +2,7 @@
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 version: 2
 
-project_name: signoz-community
+project_name: signoz
 
 before:
   hooks:
@@ -11,7 +11,7 @@ before:
 builds:
   - id: signoz
     binary: bin/signoz
-    main: pkg/query-service/main.go
+    main: ee/query-service/main.go
     env:
       - CGO_ENABLED=1
       - >-

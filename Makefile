@@ -25,7 +25,7 @@ GOARCH ?= $(shell go env GOARCH)
 GOPATH ?= $(shell go env GOPATH)
 
 REPONAME ?= coolboi567
-DOCKER_TAG ?= $(subst v,,$(BUILD_VERSION))
+DOCKER_TAG ?= $(BUILD_VERSION)
 SIGNOZ_DOCKER_IMAGE ?= signoz
 SIGNOZ_COMMUNITY_DOCKER_IMAGE ?= signoz-community
 
@@ -76,7 +76,7 @@ run-go: ## Runs the go backend server
 		--use-logs-new-schema true \
 		--use-trace-new-schema true
 
-all: build-push-frontend build-push-query-service
+all: build-push-frontend build-push-signoz
 
 # Steps to build static files of frontend
 build-frontend-static:
@@ -178,7 +178,7 @@ test:
 ########################################################
 # Goreleaser
 ########################################################
-.PHONY: goreleaser-merge goreleaser-split goreleaser-split-histogram-quantile goreleaser-split-signoz goreleaser-split-signoz-community goreleaser-snapshot goreleaser-snapshot-histogram-quantile goreleaser-snapshot-signoz goreleaser-snapshot-signoz-community
+.PHONY: gor-snapshot gor-snapshot-histogram-quantile gor-snapshot-signoz gor-snapshot-signoz-community gor-split gor-split-histogram-quantile gor-split-signoz gor-split-signoz-community gor-merge
 
 gor-snapshot:
 	@if [[ ${GORELEASER_WORKDIR} ]]; then \
