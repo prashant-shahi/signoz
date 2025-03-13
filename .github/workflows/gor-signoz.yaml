@@ -93,6 +93,11 @@ jobs:
         shell: bash
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: cache-frontend
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.workdir }}/frontend-build
+          key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         if: matrix.os == 'ubuntu-latest'

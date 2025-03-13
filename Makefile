@@ -148,6 +148,11 @@ check-no-ee-references:
 test:
 	go test ./pkg/...
 
+########################################################
+# Goreleaser
+########################################################
+.PHONY: goreleaser-snapshot goreleaser-snapshot-histogram-quantile goreleaser-snapshot-signoz goreleaser-snapshot-signoz-community
+
 goreleaser-snapshot:
 	@if [[ ${GORELEASER_WORKDIR} ]]; then \
 		cd ${GORELEASER_WORKDIR} && \
