@@ -45,7 +45,7 @@ jobs:
       - name: upload-frontend-artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.workdir }}/frontend-build
+          name: ${{ matrix.workdir }}-frontend-build
           path: frontend/build
   build:
     needs: prepare
@@ -87,8 +87,8 @@ jobs:
       - name: download-frontend-artifact
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.workdir }}/frontend-build
-          path: ${{ matrix.workdir }}/frontend-build
+          name: ${{ matrix.workdir }}-frontend-build
+          path: frontend/build
       - name: get-sha
         shell: bash
         run: |
