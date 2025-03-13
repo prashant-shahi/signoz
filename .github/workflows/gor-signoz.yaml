@@ -10,6 +10,45 @@ permissions:
 
 jobs:
   prepare:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workdir:
+          - pkg/query-service
+          - ee/query-service
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: get-sha
+        shell: bash
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: dotenv-frontend
+        if: matrix.workdir == 'ee/query-service'
+        working-directory: frontend
+        run: |
+          echo 'INTERCOM_APP_ID="${{ secrets.INTERCOM_APP_ID }}"' > .env
+          echo 'SEGMENT_ID="${{ secrets.SEGMENT_ID }}"' >> .env
+          echo 'SENTRY_AUTH_TOKEN="${{ secrets.SENTRY_AUTH_TOKEN }}"' >> .env
+          echo 'SENTRY_ORG="${{ secrets.SENTRY_ORG }}"' >> .env
+          echo 'SENTRY_PROJECT_ID="${{ secrets.SENTRY_PROJECT_ID }}"' >> .env
+          echo 'SENTRY_DSN="${{ secrets.SENTRY_DSN }}"' >> .env
+          echo 'TUNNEL_URL="${{ secrets.TUNNEL_URL }}"' >> .env
+          echo 'TUNNEL_DOMAIN="${{ secrets.TUNNEL_DOMAIN }}"' >> .env
+          echo 'POSTHOG_KEY="${{ secrets.POSTHOG_KEY }}"' >> .env
+          echo 'CUSTOMERIO_ID="${{ secrets.CUSTOMERIO_ID }}"' >> .env
+          echo 'CUSTOMERIO_SITE_ID="${{ secrets.CUSTOMERIO_SITE_ID }}"' >> .env
+      - name: build-frontend
+        run: make build-frontend-static
+      - name: upload-frontend-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.workdir }}/frontend-build
+          path: frontend/build
+  build:
+    needs: prepare
     strategy:
       matrix:
         os:
@@ -45,30 +84,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+      - name: download-frontend-artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.workdir }}/frontend-build
+          path: ${{ matrix.workdir }}/frontend-build
       - name: get-sha
         shell: bash
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: dotenv-frontend
-        if: matrix.workdir == 'ee/query-service'
-        working-directory: frontend
-        run: |
-          echo 'INTERCOM_APP_ID="${{ secrets.INTERCOM_APP_ID }}"' > .env
-          echo 'SEGMENT_ID="${{ secrets.SEGMENT_ID }}"' >> .env
-          echo 'SENTRY_AUTH_TOKEN="${{ secrets.SENTRY_AUTH_TOKEN }}"' >> .env
-          echo 'SENTRY_ORG="${{ secrets.SENTRY_ORG }}"' >> .env
-          echo 'SENTRY_PROJECT_ID="${{ secrets.SENTRY_PROJECT_ID }}"' >> .env
-          echo 'SENTRY_DSN="${{ secrets.SENTRY_DSN }}"' >> .env
-          echo 'TUNNEL_URL="${{ secrets.TUNNEL_URL }}"' >> .env
-          echo 'TUNNEL_DOMAIN="${{ secrets.TUNNEL_DOMAIN }}"' >> .env
-          echo 'POSTHOG_KEY="${{ secrets.POSTHOG_KEY }}"' >> .env
-          echo 'CUSTOMERIO_ID="${{ secrets.CUSTOMERIO_ID }}"' >> .env
-          echo 'CUSTOMERIO_SITE_ID="${{ secrets.CUSTOMERIO_SITE_ID }}"' >> .env
-      - name: cache-frontend
-        uses: actions/cache@v4
-        with:
-          path: ${{ matrix.workdir }}/frontend-build
-          key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         if: matrix.os == 'ubuntu-latest'
@@ -93,7 +117,7 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
   release:
     runs-on: ubuntu-latest
-    needs: prepare
+    needs: build
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
@@ -119,7 +143,7 @@ jobs:
         with:
           go-version: "1.22"
 
-      # copy the caches from prepare
+      # copy the caches from build
       - name: get-sha
         shell: bash
         run: |

@@ -18,6 +18,7 @@ EE_QUERY_SERVICE_DIRECTORY ?= ee/query-service
 STANDALONE_DIRECTORY ?= deploy/docker
 SWARM_DIRECTORY ?= deploy/docker-swarm
 CH_HISTOGRAM_QUANTILE_DIRECTORY ?= scripts/clickhouse/histogramquantile
+GORELEASER_BIN ?= goreleaser
 
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
@@ -25,8 +26,8 @@ GOPATH ?= $(shell go env GOPATH)
 
 REPONAME ?= coolboi567
 DOCKER_TAG ?= $(subst v,,$(BUILD_VERSION))
-FRONTEND_DOCKER_IMAGE ?= frontend
-QUERY_SERVICE_DOCKER_IMAGE ?= query-service
+SIGNOZ_DOCKER_IMAGE ?= signoz
+SIGNOZ_COMMUNITY_DOCKER_IMAGE ?= signoz-community
 
 # Build-time Go variables
 PACKAGE?=go.signoz.io/signoz
@@ -60,11 +61,11 @@ build-signoz-static:
 	@echo "--> Building signoz static binary"
 	@echo "------------------"
 	@if [ $(DEV_BUILD) != "" ]; then \
-		cd $(QUERY_SERVICE_DIRECTORY) && \
+		cd $(EE_QUERY_SERVICE_DIRECTORY) && \
 		CGO_ENABLED=1 go build -tags timetzdata -a -o ./bin/signoz-${GOOS}-${GOARCH} \
 		-ldflags "-linkmode external -extldflags '-static' -s -w ${LD_FLAGS} ${DEV_LD_FLAGS}"; \
 	else \
-		cd $(QUERY_SERVICE_DIRECTORY) && \
+		cd $(EE_QUERY_SERVICE_DIRECTORY) && \
 		CGO_ENABLED=1 go build -tags timetzdata -a -o ./bin/signoz-${GOOS}-${GOARCH} \
 		-ldflags "-linkmode external -extldflags '-static' -s -w ${LD_FLAGS}"; \
 	fi
@@ -89,31 +90,31 @@ build-signoz-amd64: build-signoz-static-amd64 build-frontend-static
 	@echo "--> Building signoz docker image for amd64"
 	@echo "------------------"
 	@docker build --file $(EE_QUERY_SERVICE_DIRECTORY)/Dockerfile \
-	--tag $(REPONAME)/$(EE_QUERY_SERVICE_DOCKER_IMAGE):$(DOCKER_TAG) \
+	--tag $(REPONAME)/$(SIGNOZ_DOCKER_IMAGE):$(DOCKER_TAG) \
 	--build-arg TARGETPLATFORM="linux/amd64" .
 
 # Step to build and push docker image of query in amd64 and arm64 (used in push pipeline)
 build-push-signoz: build-signoz-static-all
 	@echo "------------------"
-	@echo "--> Building and pushing query-service docker image"
+	@echo "--> Building and pushing signoz docker image"
 	@echo "------------------"
 	@docker buildx build --file $(EE_QUERY_SERVICE_DIRECTORY)/Dockerfile --progress plain \
 	--push --platform linux/arm64,linux/amd64 \
-	--tag $(REPONAME)/$(EE_QUERY_SERVICE_DOCKER_IMAGE):$(DOCKER_TAG) .
+	--tag $(REPONAME)/$(SIGNOZ_DOCKER_IMAGE):$(DOCKER_TAG) .
 
 # Step to build docker image of signoz community in amd64 (used in build pipeline)
 build-signoz-community-amd64:
 	@echo "------------------"
 	@echo "--> Building signoz docker image for amd64"
 	@echo "------------------"
-	make QUERY_SERVICE_DIRECTORY=${QUERY_SERVICE_DIRECTORY} build-signoz-amd64
+	make EE_QUERY_SERVICE_DIRECTORY=${QUERY_SERVICE_DIRECTORY} SIGNOZ_DOCKER_IMAGE=${SIGNOZ_COMMUNITY_DOCKER_IMAGE} build-signoz-amd64
 
 # Step to build and push docker image of signoz community in amd64 and arm64 (used in push pipeline)
 build-push-signoz-community:
 	@echo "------------------"
 	@echo "--> Building and pushing signoz community docker image"
 	@echo "------------------"
-	make QUERY_SERVICE_DIRECTORY=${QUERY_SERVICE_DIRECTORY} build-push-signoz
+	make EE_QUERY_SERVICE_DIRECTORY=${QUERY_SERVICE_DIRECTORY} SIGNOZ_DOCKER_IMAGE=${SIGNOZ_COMMUNITY_DOCKER_IMAGE} build-push-signoz
 
 dev-setup:
 	mkdir -p /var/lib/signoz
@@ -135,22 +136,6 @@ run-testing:
 down-signoz:
 	@docker-compose -f $(STANDALONE_DIRECTORY)/docker-compose.yaml down -v
 
-clear-standalone-data:
-	@docker run --rm -v "$(PWD)/$(STANDALONE_DIRECTORY)/data:/pwd" busybox \
-	sh -c "cd /pwd && rm -rf alertmanager/* clickhouse*/* signoz/* zookeeper-*/*"
-
-clear-swarm-data:
-	@docker run --rm -v "$(PWD)/$(SWARM_DIRECTORY)/data:/pwd" busybox \
-	sh -c "cd /pwd && rm -rf alertmanager/* clickhouse*/* signoz/* zookeeper-*/*"
-
-clear-standalone-ch:
-	@docker run --rm -v "$(PWD)/$(STANDALONE_DIRECTORY)/data:/pwd" busybox \
-	sh -c "cd /pwd && rm -rf clickhouse*/* zookeeper-*/*"
-
-clear-swarm-ch:
-	@docker run --rm -v "$(PWD)/$(SWARM_DIRECTORY)/data:/pwd" busybox \
-	sh -c "cd /pwd && rm -rf clickhouse*/* zookeeper-*/*"
-
 check-no-ee-references:
 	@echo "Checking for 'ee' package references in 'pkg' directory..."
 	@if grep -R --include="*.go" '.*/ee/.*' pkg/; then \
@@ -166,11 +151,17 @@ test:
 goreleaser-snapshot:
 	@if [[ ${GORELEASER_WORKDIR} ]]; then \
 		cd ${GORELEASER_WORKDIR} && \
-		goreleaser release --clean --snapshot; \
+		${GORELEASER_BIN} release --clean --snapshot; \
 		cd -; \
 	else \
-		goreleaser release --clean --snapshot; \
+		${GORELEASER_BIN} release --clean --snapshot; \
 	fi
 
 goreleaser-snapshot-histogram-quantile:
 	make GORELEASER_WORKDIR=$(CH_HISTOGRAM_QUANTILE_DIRECTORY) goreleaser-snapshot
+
+goreleaser-snapshot-signoz: build-frontend-static
+	make GORELEASER_WORKDIR=$(EE_QUERY_SERVICE_DIRECTORY) goreleaser-snapshot
+
+goreleaser-snapshot-signoz-community: build-frontend-static
+	make GORELEASER_WORKDIR=$(QUERY_SERVICE_DIRECTORY) goreleaser-snapshot

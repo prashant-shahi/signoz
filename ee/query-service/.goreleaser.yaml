@@ -8,7 +8,7 @@ before:
   hooks:
     - go mod tidy
     - cp ../../LICENSE ./PROJECT_LICENSE
-    - sh -c 'cd ../.. && make build-frontend-static && cp -r frontend/build ee/query-service/frontend-build'
+    - cp ../../frontend/build ./frontend-build
     - cp ../../README.md ./PROJECT_README.md
 
 after:
@@ -53,58 +53,6 @@ archives:
         dst: LICENSE
       - src: frontend-build
         dst: signoz-web
-
-dockers:
-  - dockerfile: Dockerfile.goreleaser
-    image_templates:
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.source={{ .GitURL }}"
-      - "--platform=linux/amd64"
-    use: buildx
-    templated_files:
-      - src: ../../pkg/query-service/config/prometheus.yml
-        dst: prometheus.yml
-      - src: ../../pkg/query-service/templates
-        dst: templates
-      - src: ../../frontend-build
-        dst: frontend-build
-  - dockerfile: Dockerfile.goreleaser
-    image_templates:
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.description={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.created={{ .Date }}"
-      - "--label=org.opencontainers.image.name={{ .ProjectName }}"
-      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
-      - "--label=org.opencontainers.image.version={{ .Version }}"
-      - "--label=org.opencontainers.image.source={{ .GitURL }}"
-      - "--platform=linux/arm64"
-    use: buildx
-    templated_files:
-      - src: ../../pkg/query-service/config/prometheus.yml
-        dst: prometheus.yml
-      - src: ../../pkg/query-service/templates
-        dst: templates
-      - src: ../../frontend-build
-        dst: frontend-build
-
-docker_manifests:
-  - name_template: coolboi567/{{ .ProjectName }}:v{{ .Version }}
-    image_templates:
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
-  - name_template: coolboi567/{{ .ProjectName }}:latest
-    image_templates:
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-amd64
-      - coolboi567/{{ .ProjectName }}:v{{ .Version }}-arm64
 
 release:
   name_template: "v{{ .Version }}"

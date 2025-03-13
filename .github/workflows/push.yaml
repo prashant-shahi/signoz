@@ -8,7 +8,7 @@ on:
       - v*
 
 jobs:
-  image-build-and-push-query-service:
+  image-build-and-push-signoz:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -50,9 +50,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - name: Build and push docker image
-        run: make build-push-query-service
+        run: make build-push-signoz
 
-  image-build-and-push-ee-query-service:
+  image-build-and-push-signoz-community:
     runs-on: ubuntu-latest
     needs: build-frontend-static
     steps:
@@ -108,4 +108,4 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - name: Build and push docker image
-        run: make build-push-ee-query-service
+        run: make build-push-signoz-community
