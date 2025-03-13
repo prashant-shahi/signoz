@@ -42,12 +42,16 @@ jobs:
           echo 'CUSTOMERIO_SITE_ID="${{ secrets.CUSTOMERIO_SITE_ID }}"' >> .env
       - name: build-frontend
         run: make build-frontend-static
+      - name: build-name
+        run: |
+          if [ "${{ matrix.workdir }}" == "ee/query-service" ]; then
+            echo "build_name=signoz" >> $GITHUB_ENV
+          else
+            echo "build_name=signoz-community" >> $GITHUB_ENV
       - name: upload-frontend-artifact
         uses: actions/upload-artifact@v4
-        env:
-          WORKDIR: ${{ matrix.workdir }}
         with:
-          name: ${WORKDIR////_}-frontend-build
+          name: ${{ env.build_name }}-frontend-build
           path: frontend/build
   build:
     needs: prepare
@@ -86,12 +90,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+      - name: build-name
+        run: |
+          if [ "${{ matrix.workdir }}" == "ee/query-service" ]; then
+            echo "build_name=signoz" >> $GITHUB_ENV
+          else
+            echo "build_name=signoz-community" >> $GITHUB_ENV
       - name: download-frontend-artifact
         uses: actions/download-artifact@v4
-        env:
-          WORKDIR: ${{ matrix.workdir }}
         with:
-          name: ${WORKDIR////_}-frontend-build
+          name: ${{ env.build_name }}-frontend-build
           path: frontend/build
       - name: get-sha
         shell: bash
