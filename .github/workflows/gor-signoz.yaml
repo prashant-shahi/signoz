@@ -44,8 +44,10 @@ jobs:
         run: make build-frontend-static
       - name: upload-frontend-artifact
         uses: actions/upload-artifact@v4
+        env:
+          WORKDIR: ${{ matrix.workdir }}
         with:
-          name: ${{ matrix.workdir }}-frontend-build
+          name: ${WORKDIR////_}-frontend-build
           path: frontend/build
   build:
     needs: prepare
@@ -86,8 +88,10 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - name: download-frontend-artifact
         uses: actions/download-artifact@v4
+        env:
+          WORKDIR: ${{ matrix.workdir }}
         with:
-          name: ${{ matrix.workdir }}-frontend-build
+          name: ${WORKDIR////_}-frontend-build
           path: frontend/build
       - name: get-sha
         shell: bash
