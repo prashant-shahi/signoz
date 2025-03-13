@@ -49,7 +49,7 @@ jobs:
           - ubuntu-latest
           - macos-latest
     env:
-      WORKDIR: ee/query-service
+      CONFIG_PATH: ee/query-service/.goreleaser.yaml
     runs-on: ${{ matrix.os }}
     steps:
       - name: checkout
@@ -90,30 +90,29 @@ jobs:
         uses: actions/cache@v4
         if: matrix.os == 'ubuntu-latest'
         with:
-          path: ${{ env.WORKDIR }}/dist/linux
+          path: dist/linux
           key: linux-${{ env.sha_short }}
       - name: cache-darwin
         uses: actions/cache@v4
         if: matrix.os == 'macos-latest'
         with:
-          path: ${{ env.WORKDIR }}/dist/darwin
+          path: dist/darwin
           key: darwin-${{ env.sha_short }}
       - name: release
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser-pro
           version: '~> v2'
-          args: release --config ${{ env.WORKDIR }}/.goreleaser.yaml --clean --split
+          args: release --config ${{ env.CONFIG_PATH }} --clean --split
           workdir: .
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
   release:
     runs-on: ubuntu-latest
     needs: build
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
-      WORKDIR: ee/query-service
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -164,4 +163,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-
