@@ -86,11 +86,6 @@ jobs:
         shell: bash
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: cache-frontend
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.WORKDIR }}/frontend-build
-          key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         if: matrix.os == 'ubuntu-latest'
@@ -147,20 +142,15 @@ jobs:
         shell: bash
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-      - name: cache-frontend
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.WORKDIR }}/frontend-build
-          key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         with:
-          path: ${{ env.WORKDIR }}/dist/linux
+          path: dist/linux
           key: linux-${{ env.sha_short }}
       - name: cache-darwin
         uses: actions/cache@v4
         with:
-          path: ${{ env.WORKDIR }}/dist/darwin
+          path: dist/darwin
           key: darwin-${{ env.sha_short }}
 
       # release
@@ -169,7 +159,7 @@ jobs:
         with:
           distribution: goreleaser-pro
           version: '~> v2'
-          args: continue --merge --config ${{ env.WORKDIR }}/.goreleaser.yaml
+          args: continue --merge
           workdir: .
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
