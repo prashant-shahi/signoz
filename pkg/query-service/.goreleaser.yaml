@@ -8,8 +8,8 @@ before:
   hooks:
     - go mod tidy
     - cp ../../LICENSE ./PROJECT_LICENSE
-    - cp ../../frontend/build ./frontend-build
     - cp ../../README.md ./PROJECT_README.md
+    - cp -r ../../frontend/build ./frontend-build
 
 after:
   hooks:
@@ -51,7 +51,7 @@ archives:
         dst: README.md
       - src: PROJECT_LICENSE
         dst: LICENSE
-      - src: ../frontend/build
+      - src: frontend-build
         dst: signoz-web
 
 release:
