@@ -43,11 +43,13 @@ jobs:
       - name: build-frontend
         run: make build-frontend-static
       - name: build-name
+        shell: bash
         run: |
-          if [ "${{ matrix.workdir }}" == "ee/query-service" ]; then
+          if [[ "${{ matrix.workdir }}" == "ee/query-service" ]]; then
             echo "build_name=signoz" >> $GITHUB_ENV
           else
             echo "build_name=signoz-community" >> $GITHUB_ENV
+          fi
       - name: upload-frontend-artifact
         uses: actions/upload-artifact@v4
         with:
@@ -91,11 +93,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - name: build-name
+        shell: bash
         run: |
-          if [ "${{ matrix.workdir }}" == "ee/query-service" ]; then
+          if [[ "${{ matrix.workdir }}" == "ee/query-service" ]]; then
             echo "build_name=signoz" >> $GITHUB_ENV
           else
             echo "build_name=signoz-community" >> $GITHUB_ENV
+          fi
       - name: download-frontend-artifact
         uses: actions/download-artifact@v4
         with:
