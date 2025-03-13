@@ -112,19 +112,19 @@ jobs:
       - name: cache-frontend
         uses: actions/cache@v4
         with:
-          path: ${{ matrix.workdir }}/frontend-build
+          path: frontend-build
           key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         if: matrix.os == 'ubuntu-latest'
         with:
-          path: ${{ matrix.workdir }}/dist/linux
+          path: dist/linux
           key: linux-${{ env.sha_short }}
       - name: cache-darwin
         uses: actions/cache@v4
         if: matrix.os == 'macos-latest'
         with:
-          path: ${{ matrix.workdir }}/dist/darwin
+          path: dist/darwin
           key: darwin-${{ env.sha_short }}
       - name: release
         uses: goreleaser/goreleaser-action@v6
@@ -172,17 +172,17 @@ jobs:
       - name: cache-frontend
         uses: actions/cache@v4
         with:
-          path: ${{ matrix.workdir }}/frontend-build
+          path: frontend-build
           key: frontend-${{ env.sha_short }}
       - name: cache-linux
         uses: actions/cache@v4
         with:
-          path: ${{ matrix.workdir }}/dist/linux
+          path: dist/linux
           key: linux-${{ env.sha_short }}
       - name: cache-darwin
         uses: actions/cache@v4
         with:
-          path: ${{ matrix.workdir }}/dist/darwin
+          path: dist/darwin
           key: darwin-${{ env.sha_short }}
 
       # release
