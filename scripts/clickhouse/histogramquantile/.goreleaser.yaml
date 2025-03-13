@@ -13,11 +13,6 @@ before:
     - cp ../../../LICENSE .
     - cp ../../../README.md .
 
-after:
-  hooks:
-    - rm LICENSE
-    - rm README.md
-
 builds:
   - env:
       - CGO_ENABLED=0

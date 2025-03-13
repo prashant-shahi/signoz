@@ -11,11 +11,6 @@ before:
     - cp ../../README.md ./PROJECT_README.md
     - cp -r ../../frontend/build ./frontend-build
 
-after:
-  hooks:
-    - rm PROJECT_LICENSE
-    - rm PROJECT_README.md
-
 builds:
   - env:
       - CGO_ENABLED=1
