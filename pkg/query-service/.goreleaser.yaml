@@ -62,4 +62,3 @@ archives:
 release:
   name_template: "v{{ .Version }}"
   draft: false
-  make_latest: false
